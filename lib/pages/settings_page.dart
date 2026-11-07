@@ -61,10 +61,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '设置',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+        title: const Text('设置', style: TextStyle(fontWeight: FontWeight.w800)),
         centerTitle: true,
         backgroundColor: AppColors.bg,
         scrolledUnderElevation: 0,
@@ -72,6 +69,56 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          // ---------- 主题色 ----------
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+            decoration: AppColors.card(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.palette_rounded,
+                      color: AppColors.brand,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '主题色',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '全局生效，重启后保持',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: 14),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 12,
+                  children: [
+                    for (final p in kThemePresets)
+                      _ThemeSwatch(
+                        preset: p,
+                        selected: p.id == AppColors.preset.id,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 12),
+
           // ---------- 配置卡片 ----------
           Container(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
@@ -79,10 +126,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.smart_toy_rounded,
-                        color: AppColors.brand, size: 20),
+                    Icon(
+                      Icons.smart_toy_rounded,
+                      color: AppColors.brand,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'AI 服务配置',
@@ -108,7 +158,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   controller: _baseUrlController,
                   style: const TextStyle(fontSize: 13.5),
                   decoration: const InputDecoration(
-                      hintText: 'https://api.deepseek.com/v1'),
+                    hintText: 'https://api.deepseek.com/v1',
+                  ),
                 ),
                 const Divider(),
                 const SizedBox(height: 8),
@@ -125,8 +176,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 TextField(
                   controller: _modelController,
                   style: const TextStyle(fontSize: 13.5),
-                  decoration:
-                      const InputDecoration(hintText: 'deepseek-flash'),
+                  decoration: const InputDecoration(hintText: 'deepseek-flash'),
                 ),
               ],
             ),
@@ -140,11 +190,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               color: AppColors.brandSoft.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.shield_rounded,
-                    color: AppColors.brandDeep, size: 20),
+                Icon(
+                  Icons.shield_rounded,
+                  color: AppColors.brandDeep,
+                  size: 20,
+                ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -162,6 +215,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           const SizedBox(height: 24),
           _SaveButton(saving: _saving, onSave: _save),
+        ],
+      ),
+    );
+  }
+}
+
+/// 主题色圆形选择器
+class _ThemeSwatch extends StatelessWidget {
+  final ThemePreset preset;
+  final bool selected;
+
+  const _ThemeSwatch({required this.preset, required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: () async {
+        if (selected) return;
+        await AppColors.applyPreset(preset);
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [preset.brand, preset.brandDeep],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? AppColors.textPrimary : Colors.transparent,
+                width: 2.5,
+              ),
+            ),
+            child: selected
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 24)
+                : null,
+          ),
+          SizedBox(height: 5),
+          Text(
+            preset.name,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+              color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+            ),
+          ),
         ],
       ),
     );

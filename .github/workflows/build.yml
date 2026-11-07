@@ -25,6 +25,26 @@ jobs:
             echo "version=$V" >> "$GITHUB_OUTPUT"
           fi
 
+      # 固定签名：与本地同一把密钥，云包可直接覆盖安装
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS_VAL: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "!! secrets 未配置，回退 debug 签名"
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASS
+          keyPassword=$KEYSTORE_PASS
+          keyAlias=$KEY_ALIAS_VAL
+          storeFile=upload-keystore.jks
+          EOF
+          echo "keystore restored"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

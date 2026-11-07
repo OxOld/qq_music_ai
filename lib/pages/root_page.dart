@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
 import 'home_page.dart';
 import 'mine_page.dart';
 
 /// 根页面：底部「首页 / 我的」双 Tab + 迷你播放条
+///
+/// 监听主题切换：AppColors 是静态取值，需要整棵树重跑 build 才会换色
+/// （tab 状态与各页 State 均保留，仅重建 widget）。
 class RootPage extends StatefulWidget {
   const RootPage({super.key});
 
@@ -17,19 +21,36 @@ class _RootPageState extends State<RootPage> {
   final _mineKey = GlobalKey<MinePageState>();
 
   @override
+  void initState() {
+    super.initState();
+    AppColors.themeVersion.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppColors.themeVersion.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _index,
         children: [
-          const HomePage(),
+          // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
+          HomePage(),
           MinePage(key: _mineKey),
         ],
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const MiniPlayer(),
+          MiniPlayer(),
           NavigationBar(
             selectedIndex: _index,
             onDestinationSelected: (i) {

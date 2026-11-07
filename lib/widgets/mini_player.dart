@@ -129,12 +129,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                           ? Image.network(
                               _cover!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => const Icon(
+                              errorBuilder: (_, _, _) => Icon(
                                   Icons.music_note_rounded,
                                   color: AppColors.brandDeep,
                                   size: 19),
                             )
-                          : const Icon(Icons.music_note_rounded,
+                          : Icon(Icons.music_note_rounded,
                               color: AppColors.brandDeep, size: 19),
                     ),
                   ),

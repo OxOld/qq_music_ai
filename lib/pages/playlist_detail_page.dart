@@ -148,7 +148,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
         children: [
           // ---------- 固定头部 ----------
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: AppColors.brandGradient,
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(28),
@@ -231,7 +231,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                     strokeWidth: 2),
                               )
                             else
-                              const Icon(Icons.play_arrow_rounded,
+                              Icon(Icons.play_arrow_rounded,
                                   size: 19, color: AppColors.brandDeep),
                             const SizedBox(width: 4),
                             Text(
@@ -325,7 +325,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                                 fit: BoxFit.cover,
                                                 errorBuilder:
                                                     (_, _, _) =>
-                                                        const Icon(
+                                                        Icon(
                                                   Icons
                                                       .music_note_rounded,
                                                   size: 20,
@@ -333,7 +333,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                                       .brandDeep,
                                                 ),
                                               )
-                                            : const Icon(
+                                            : Icon(
                                                 Icons.music_note_rounded,
                                                 size: 20,
                                                 color:

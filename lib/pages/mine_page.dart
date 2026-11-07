@@ -50,8 +50,7 @@ class MinePageState extends ConsumerState<MinePage> {
       _error = null;
     });
     try {
-      final list =
-          await ref.read(qqMusicClientProvider).getMyPlaylists(auth);
+      final list = await ref.read(qqMusicClientProvider).getMyPlaylists(auth);
       if (!mounted) return;
       setState(() => _playlists = list);
     } catch (e) {
@@ -67,19 +66,31 @@ class MinePageState extends ConsumerState<MinePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('退出登录', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        content: const Text('退出后需要重新扫码登录，确定吗？',
-            style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary)),
+        title: const Text(
+          '退出登录',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        content: const Text(
+          '退出后需要重新扫码登录，确定吗？',
+          style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('退出',
-                style: TextStyle(
-                    color: AppColors.danger, fontWeight: FontWeight.w700)),
+            child: const Text(
+              '退出',
+              style: TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -99,9 +110,9 @@ class MinePageState extends ConsumerState<MinePage> {
   }
 
   void _goToLogin() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LoginPage()));
     // 登录页返回后刷新
     _loadIfLoggedIn();
     setState(() {});
@@ -182,24 +193,34 @@ class MinePageState extends ConsumerState<MinePage> {
             ),
             const SizedBox(height: 6),
             ListTile(
-              leading: const Icon(Icons.edit_rounded,
-                  color: AppColors.brandDeep, size: 21),
-              title: const Text('修改名称',
-                  style: TextStyle(
-                      fontSize: 14.5, fontWeight: FontWeight.w600)),
+              leading: Icon(
+                Icons.edit_rounded,
+                color: AppColors.brandDeep,
+                size: 21,
+              ),
+              title: const Text(
+                '修改名称',
+                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+              ),
               onTap: () {
                 Navigator.pop(sheetCtx);
                 _renamePlaylist(playlist);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded,
-                  color: AppColors.danger, size: 21),
-              title: const Text('删除歌单',
-                  style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.danger)),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.danger,
+                size: 21,
+              ),
+              title: const Text(
+                '删除歌单',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.danger,
+                ),
+              ),
               onTap: () {
                 Navigator.pop(sheetCtx);
                 _deletePlaylist(playlist);
@@ -218,8 +239,10 @@ class MinePageState extends ConsumerState<MinePage> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('修改歌单名称',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        title: const Text(
+          '修改歌单名称',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -239,18 +262,23 @@ class MinePageState extends ConsumerState<MinePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('取消',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () {
               final v = controller.text.trim();
               if (v.isNotEmpty) Navigator.pop(dialogCtx, v);
             },
-            child: const Text('保存',
-                style: TextStyle(
-                    color: AppColors.brandDeep,
-                    fontWeight: FontWeight.w700)),
+            child: Text(
+              '保存',
+              style: TextStyle(
+                color: AppColors.brandDeep,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -264,7 +292,9 @@ class MinePageState extends ConsumerState<MinePage> {
       barrierDismissible: false,
       builder: (_) => const AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18))),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(18)),
+        ),
         content: SizedBox(
           width: 60,
           child: Row(
@@ -280,7 +310,9 @@ class MinePageState extends ConsumerState<MinePage> {
     );
 
     try {
-      await ref.read(qqMusicClientProvider).renamePlaylist(
+      await ref
+          .read(qqMusicClientProvider)
+          .renamePlaylist(
             ref.read(qqAuthProvider),
             playlist: playlist,
             newName: newName,
@@ -301,22 +333,35 @@ class MinePageState extends ConsumerState<MinePage> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('删除歌单',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        content: Text('确定删除「${playlist.name}」吗？\n该操作不可恢复。',
-            style: const TextStyle(
-                fontSize: 13.5, height: 1.5, color: AppColors.textSecondary)),
+        title: const Text(
+          '删除歌单',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          '确定删除「${playlist.name}」吗？\n该操作不可恢复。',
+          style: const TextStyle(
+            fontSize: 13.5,
+            height: 1.5,
+            color: AppColors.textSecondary,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('取消',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('删除',
-                style: TextStyle(
-                    color: AppColors.danger, fontWeight: FontWeight.w700)),
+            child: const Text(
+              '删除',
+              style: TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -324,10 +369,9 @@ class MinePageState extends ConsumerState<MinePage> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await ref.read(qqMusicClientProvider).deletePlaylist(
-            ref.read(qqAuthProvider),
-            dirId: playlist.dirId,
-          );
+      await ref
+          .read(qqMusicClientProvider)
+          .deletePlaylist(ref.read(qqAuthProvider), dirId: playlist.dirId);
       if (!mounted) return;
       AppToast.show(context, '歌单「${playlist.name}」已删除', success: true);
       _load();
@@ -340,218 +384,235 @@ class MinePageState extends ConsumerState<MinePage> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(qqAuthProvider);
-    final created =
-        (_playlists ?? const <MyPlaylist>[]).where((p) => p.isCreated).toList();
-    final collected =
-        (_playlists ?? const <MyPlaylist>[]).where((p) => !p.isCreated).toList();
+    final created = (_playlists ?? const <MyPlaylist>[])
+        .where((p) => p.isCreated)
+        .toList();
+    final collected = (_playlists ?? const <MyPlaylist>[])
+        .where((p) => !p.isCreated)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: RefreshIndicator(
-        color: AppColors.brand,
-        onRefresh: _load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          children: [
-            // ---------- 头部 ----------
-            Container(
-              decoration: const BoxDecoration(
-                gradient: AppColors.brandGradient,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(28),
-                  bottomRight: Radius.circular(28),
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 14),
-                    const Row(
-                      children: [
-                        Icon(Icons.person_rounded,
-                            color: Colors.white, size: 26),
-                        SizedBox(width: 10),
-                        Text(
-                          '我的',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      auth.isLoggedIn ? 'QQ：${auth.uin}' : '登录后可查看与播放自己的歌单',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 13.5,
-                      ),
-                    ),
-                  ],
-                ),
+      body: Column(
+        children: [
+          // ---------- 头部（固定，不随列表滚动） ----------
+          Container(
+            decoration: BoxDecoration(
+              gradient: AppColors.brandGradient,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
               ),
             ),
-
-            // ---------- 未登录 ----------
-            if (!auth.isLoggedIn) ...[
-              const SizedBox(height: 24),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(28),
-                decoration: AppColors.card(),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.brandGradient,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.music_note_rounded,
-                          color: Colors.white, size: 32),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '还没有登录 QQ 音乐',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      '登录后可以在这里查看自己的歌单并播放',
-                      style: TextStyle(
-                          fontSize: 12.5, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 20),
-                    _LoginButton(onTap: _goToLogin),
-                  ],
-                ),
-              ),
-            ],
-
-            // ---------- 已登录：歌单列表（自建 / 收藏 分组） ----------
-            if (auth.isLoggedIn) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-                child: Row(
-                  children: [
-                    const Text(
-                      '我的歌单',
-                      style: TextStyle(
-                        fontSize: 16.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    if (_playlists != null) ...[
-                      const SizedBox(width: 8),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  const Row(
+                    children: [
+                      Icon(Icons.person_rounded, color: Colors.white, size: 26),
+                      SizedBox(width: 10),
                       Text(
-                        '${_playlists!.length} 个',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textSecondary,
+                        '我的',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ],
-                    const Spacer(),
-                    if (_loading)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                  ],
-                ),
-              ),
-              if (_error != null)
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.dangerSoft,
-                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(
-                        color: Color(0xFFB0333E), fontSize: 12.5, height: 1.5),
-                  ),
-                ),
-              if (_playlists != null && _playlists!.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: Text('还没有歌单，去首页创建一个吧',
-                        style: TextStyle(
-                            color: AppColors.textSecondary, fontSize: 13)),
-                  ),
-                ),
-              if (_playlists != null) ...[
-                // ---------- 自建歌单 ----------
-                _sectionHeader('自建歌单', created.length),
-                for (var i = 0; i < created.length; i++)
-                  _PlaylistTile(
-                    playlist: created[i],
-                    first: i == 0,
-                    onMore: created[i].dirId > 0 && created[i].id != '201'
-                        ? () => _showPlaylistActions(created[i])
-                        : null,
-                  ),
-                // ---------- 收藏歌单 ----------
-                if (collected.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  _sectionHeader('收藏歌单', collected.length),
-                  for (var i = 0; i < collected.length; i++)
-                    _PlaylistTile(
-                      playlist: collected[i],
-                      first: i == 0,
+                  const SizedBox(height: 6),
+                  Text(
+                    auth.isLoggedIn ? 'QQ：${auth.uin}' : '登录后可查看与播放自己的歌单',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13.5,
                     ),
-                ],
-              ],
-            ],
-            // ---------- 菜单（设置 / 退出登录） ----------
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              decoration: AppColors.card(),
-              child: Column(
-                children: [
-                  _MenuRow(
-                    icon: Icons.settings_rounded,
-                    label: '设置',
-                    subtitle: 'AI 服务配置（API Key / 模型）',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SettingsPage()),
-                      );
-                    },
                   ),
-                  if (auth.isLoggedIn) ...[
-                    const Divider(indent: 58),
-                    _MenuRow(
-                      icon: Icons.logout_rounded,
-                      label: '退出登录',
-                      danger: true,
-                      onTap: _logout,
-                    ),
-                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          ),
+          // ---------- 滚动区 ----------
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.brand,
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                children: [
+                  // ---------- 未登录 ----------
+                  if (!auth.isLoggedIn) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.all(28),
+                      decoration: AppColors.card(),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.brandGradient,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(
+                              Icons.music_note_rounded,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            '还没有登录 QQ 音乐',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            '登录后可以在这里查看自己的歌单并播放',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          _LoginButton(onTap: _goToLogin),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ---------- 已登录：歌单列表（自建 / 收藏 分组） ----------
+                  if (auth.isLoggedIn) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                      child: Row(
+                        children: [
+                          const Text(
+                            '我的歌单',
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (_playlists != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_playlists!.length} 个',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          if (_loading)
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (_error != null)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.dangerSoft,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(
+                            color: Color(0xFFB0333E),
+                            fontSize: 12.5,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    if (_playlists != null && _playlists!.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            '还没有歌单，去首页创建一个吧',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_playlists != null) ...[
+                      // ---------- 自建歌单 ----------
+                      _sectionHeader('自建歌单', created.length),
+                      for (var i = 0; i < created.length; i++)
+                        _PlaylistTile(
+                          playlist: created[i],
+                          first: i == 0,
+                          onMore: created[i].dirId > 0 && created[i].id != '201'
+                              ? () => _showPlaylistActions(created[i])
+                              : null,
+                        ),
+                      // ---------- 收藏歌单 ----------
+                      if (collected.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _sectionHeader('收藏歌单', collected.length),
+                        for (var i = 0; i < collected.length; i++)
+                          _PlaylistTile(playlist: collected[i], first: i == 0),
+                      ],
+                    ],
+                  ],
+                  // ---------- 菜单（设置 / 退出登录） ----------
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                    decoration: AppColors.card(),
+                    child: Column(
+                      children: [
+                        _MenuRow(
+                          icon: Icons.settings_rounded,
+                          label: '设置',
+                          subtitle: 'AI 服务配置（API Key / 模型）',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        if (auth.isLoggedIn) ...[
+                          const Divider(indent: 58),
+                          _MenuRow(
+                            icon: Icons.logout_rounded,
+                            label: '退出登录',
+                            danger: true,
+                            onTap: _logout,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -591,9 +652,7 @@ class _MenuRow extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: danger
-                      ? AppColors.dangerSoft
-                      : AppColors.brandSoft,
+                  color: danger ? AppColors.dangerSoft : AppColors.brandSoft,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, size: 18, color: color),
@@ -626,8 +685,10 @@ class _MenuRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary,
+              ),
             ],
           ),
         ),
@@ -660,10 +721,11 @@ class _PlaylistTile extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) =>
-                  PlaylistDetailPage(playlist: playlist),
-            ));
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PlaylistDetailPage(playlist: playlist),
+              ),
+            );
           },
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -680,12 +742,15 @@ class _PlaylistTile extends StatelessWidget {
                         ? Image.network(
                             playlist.coverUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                                Icons.queue_music_rounded,
-                                color: AppColors.brandDeep),
+                            errorBuilder: (_, _, _) => Icon(
+                              Icons.queue_music_rounded,
+                              color: AppColors.brandDeep,
+                            ),
                           )
-                        : const Icon(Icons.queue_music_rounded,
-                            color: AppColors.brandDeep),
+                        : Icon(
+                            Icons.queue_music_rounded,
+                            color: AppColors.brandDeep,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -717,11 +782,16 @@ class _PlaylistTile extends StatelessWidget {
                 onMore != null
                     ? IconButton(
                         onPressed: onMore,
-                        icon: const Icon(Icons.more_vert_rounded,
-                            size: 20, color: AppColors.textSecondary),
+                        icon: const Icon(
+                          Icons.more_vert_rounded,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
                       )
-                    : const Icon(Icons.chevron_right_rounded,
-                        color: AppColors.textSecondary),
+                    : const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textSecondary,
+                      ),
               ],
             ),
           ),

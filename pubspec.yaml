@@ -47,6 +47,8 @@ dependencies:
   audio_service: ^0.18.15
   # 登录 WebView（QQ 音乐扫码登录）
   flutter_inappwebview: ^6.1.5
+  # 封面取色（播放页背景跟随封面）
+  palette_generator: ^0.3.3
 
 # 本地补丁版：通知栏动作不含 stop（白色方块）
 dependency_overrides:

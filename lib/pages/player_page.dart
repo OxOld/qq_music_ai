@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:palette_generator/palette_generator.dart';
 
 import '../providers/providers.dart';
 import '../services/player_service.dart';
@@ -36,6 +37,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   double _scrubValue = 0;
   String? _modeHint;
   Timer? _modeHintTimer;
+  Color _bgTop = const Color(0xFF1B4A38);
+  Color _bgBottom = const Color(0xFF0C211A);
+  String? _paletteFor;
 
   @override
   void initState() {
@@ -51,6 +55,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _index = service.index;
     _queueLen = service.queueLength;
     if (_playing) _rotateCtrl.repeat();
+    _syncPalette();
 
     _stateSub = service.stateStream.listen((state) {
       if (!mounted) return;
@@ -66,6 +71,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       } else {
         _rotateCtrl.stop();
       }
+      _syncPalette();
     });
     _durSub = service.durationStream.listen((d) {
       if (!mounted) return;
@@ -90,6 +96,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _index = service.index;
         _queueLen = service.queueLength;
       });
+      _syncPalette();
     });
   }
 
@@ -102,6 +109,46 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _modeHintTimer?.cancel();
     _rotateCtrl.dispose();
     super.dispose();
+  }
+
+  /// 背景跟随封面主色（参考 QQ 音乐），无封面/失败时保持当前背景
+  Future<void> _syncPalette() async {
+    final cover = _cover;
+    if (cover == null || cover.isEmpty) {
+      if (_paletteFor == null) return;
+      _paletteFor = null;
+      if (!mounted) return;
+      setState(() {
+        _bgTop = const Color(0xFF1B4A38);
+        _bgBottom = const Color(0xFF0C211A);
+      });
+      return;
+    }
+    if (cover == _paletteFor) return;
+    _paletteFor = cover;
+    try {
+      final palette = await PaletteGenerator.fromImageProvider(
+        NetworkImage(cover),
+        maximumColorCount: 24,
+      );
+      var c =
+          (palette.vibrantColor ?? palette.mutedColor ?? palette.dominantColor)
+              ?.color;
+      c ??= const Color(0xFF1B4A38);
+      // 压暗到深色 UI 舒适区间
+      final hsv = HSVColor.fromColor(c);
+      final base = hsv
+          .withValue(hsv.value.clamp(0.30, 0.55))
+          .withSaturation(hsv.saturation.clamp(0.30, 0.80))
+          .toColor();
+      if (!mounted) return;
+      setState(() {
+        _bgTop = Color.lerp(base, Colors.black, 0.18)!;
+        _bgBottom = Color.lerp(base, Colors.black, 0.80)!;
+      });
+    } catch (_) {
+      // 取色失败：保持当前背景
+    }
   }
 
   String _fmt(Duration d) {
@@ -118,9 +165,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF1B4A38), Color(0xFF0C211A)],
+            colors: [_bgTop, _bgBottom],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -143,9 +190,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         Expanded(
           flex: 5,
           child: Center(
-            child: _buildCover(
-              MediaQuery.of(context).size.shortestSide - 80,
-            ),
+            child: _buildCover(MediaQuery.of(context).size.shortestSide - 80),
           ),
         ),
         _buildTitleSection(),
@@ -163,10 +208,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     final coverSize = (size.height - 90).clamp(150.0, 300.0);
     return Row(
       children: [
-        Expanded(
-          flex: 5,
-          child: Center(child: _buildCover(coverSize)),
-        ),
+        Expanded(flex: 5, child: Center(child: _buildCover(coverSize))),
         Expanded(
           flex: 6,
           child: Padding(
@@ -196,8 +238,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                color: Colors.white, size: 30),
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Colors.white,
+              size: 30,
+            ),
           ),
           const Spacer(),
           Text(
@@ -210,8 +255,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           const Spacer(),
           IconButton(
             onPressed: () => _showQueueSheet(service),
-            icon: const Icon(Icons.queue_music_rounded,
-                color: Colors.white, size: 24),
+            icon: const Icon(
+              Icons.queue_music_rounded,
+              color: Colors.white,
+              size: 24,
+            ),
           ),
         ],
       ),
@@ -264,8 +312,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     width: 2,
                   ),
                 ),
-                child: const Icon(Icons.music_note_rounded,
-                    color: Colors.white54, size: 22),
+                child: const Icon(
+                  Icons.music_note_rounded,
+                  color: Colors.white54,
+                  size: 22,
+                ),
               ),
             ),
           ],
@@ -348,11 +399,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _fmt(_scrubbing
-                    ? Duration(
-                        milliseconds:
-                            (_scrubValue * _duration.inMilliseconds).round())
-                    : _position),
+                _fmt(
+                  _scrubbing
+                      ? Duration(
+                          milliseconds: (_scrubValue * _duration.inMilliseconds)
+                              .round(),
+                        )
+                      : _position,
+                ),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.65),
                   fontSize: 11,
@@ -377,90 +431,116 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Widget _buildControls(PlayerService service, {double bottomPad = 10}) {
     return Padding(
       padding: EdgeInsets.fromLTRB(26, 6, 26, bottomPad),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 播放模式（提示内联显示，不遮挡按钮）
-          Column(
-            children: [
-              SizedBox(
-                height: 16,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: _modeHint != null
-                      ? Text(
+      child: SizedBox(
+        height: 68,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 播放模式（提示悬浮在按钮上方，不影响整行对齐）
+            SizedBox(
+              width: 48,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      final nextMode =
+                          PlayMode.values[(service.mode.index + 1) %
+                              PlayMode.values.length];
+                      service.setMode(nextMode);
+                      _modeHintTimer?.cancel();
+                      setState(() {
+                        _modeHint = switch (nextMode) {
+                          PlayMode.listLoop => '列表循环',
+                          PlayMode.singleLoop => '单曲循环',
+                          PlayMode.sequential => '顺序播放',
+                          PlayMode.shuffle => '随机播放',
+                        };
+                      });
+                      _modeHintTimer = Timer(
+                        const Duration(milliseconds: 1300),
+                        () {
+                          if (mounted) setState(() => _modeHint = null);
+                        },
+                      );
+                    },
+                    icon: _modeIcon(
+                      service.mode,
+                      Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+                  if (_modeHint != null)
+                    Positioned(
+                      top: -20,
+                      left: -20,
+                      right: -20,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
                           _modeHint!,
                           key: ValueKey(_modeHint),
-                          style: TextStyle(
-                            color: AppColors.brand,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              IconButton(
-                onPressed: () {
-                  final nextMode = PlayMode.values[
-                      (service.mode.index + 1) % PlayMode.values.length];
-                  service.setMode(nextMode);
-                  _modeHintTimer?.cancel();
-                  setState(() {
-                    _modeHint = switch (nextMode) {
-                      PlayMode.listLoop => '列表循环',
-                      PlayMode.singleLoop => '单曲循环',
-                      PlayMode.sequential => '顺序播放',
-                      PlayMode.shuffle => '随机播放',
-                    };
-                  });
-                  _modeHintTimer = Timer(const Duration(milliseconds: 1300), () {
-                    if (mounted) setState(() => _modeHint = null);
-                  });
-                },
-                icon:
-                    _modeIcon(service.mode, Colors.white.withValues(alpha: 0.75)),
+            ),
+            IconButton(
+              onPressed: () => service.previous(),
+              icon: const Icon(
+                Icons.skip_previous_rounded,
+                color: Colors.white,
+                size: 38,
               ),
-            ],
-          ),
-          IconButton(
-            onPressed: () => service.previous(),
-            icon: const Icon(Icons.skip_previous_rounded,
-                color: Colors.white, size: 38),
-          ),
-          // 播放 / 暂停（大按钮）
-          Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
+            ),
+            // 播放 / 暂停（大按钮）
+            Material(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(999),
-              onTap: () async {
-                await service.toggle();
-                if (mounted) setState(() {});
-              },
-              child: SizedBox(
-                width: 68,
-                height: 68,
-                child: Icon(
-                  _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 42,
-                  color: AppColors.brandDeep,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () async {
+                  await service.toggle();
+                  if (mounted) setState(() {});
+                },
+                child: SizedBox(
+                  width: 68,
+                  height: 68,
+                  child: Icon(
+                    _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    size: 42,
+                    color: AppColors.brandDeep,
+                  ),
                 ),
               ),
             ),
-          ),
-          IconButton(
-            onPressed: () => service.next(),
-            icon: const Icon(Icons.skip_next_rounded,
-                color: Colors.white, size: 38),
-          ),
-          // 播放列表
-          IconButton(
-            onPressed: () => _showQueueSheet(service),
-            icon: Icon(Icons.format_list_bulleted_rounded,
-                color: Colors.white.withValues(alpha: 0.75), size: 26),
-          ),
-        ],
+            IconButton(
+              onPressed: () => service.next(),
+              icon: const Icon(
+                Icons.skip_next_rounded,
+                color: Colors.white,
+                size: 38,
+              ),
+            ),
+            // 播放列表
+            IconButton(
+              onPressed: () => _showQueueSheet(service),
+              icon: Icon(
+                Icons.format_list_bulleted_rounded,
+                color: Colors.white.withValues(alpha: 0.75),
+                size: 26,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -541,11 +621,18 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                               if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                               if (mounted) setState(() {});
                             },
-                            icon: const Icon(Icons.delete_sweep_rounded,
-                                size: 17, color: Colors.white54),
-                            label: const Text('清空',
-                                style: TextStyle(
-                                    color: Colors.white54, fontSize: 12.5)),
+                            icon: const Icon(
+                              Icons.delete_sweep_rounded,
+                              size: 17,
+                              color: Colors.white54,
+                            ),
+                            label: const Text(
+                              '清空',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12.5,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -555,9 +642,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           ? const Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
                               child: Center(
-                                child: Text('播放列表为空',
-                                    style: TextStyle(
-                                        color: Colors.white38, fontSize: 13)),
+                                child: Text(
+                                  '播放列表为空',
+                                  style: TextStyle(
+                                    color: Colors.white38,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             )
                           : ListView.builder(
@@ -573,7 +664,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                       width: 40,
                                       height: 40,
                                       color: Colors.white10,
-                                      child: covers.isNotEmpty &&
+                                      child:
+                                          covers.isNotEmpty &&
                                               i < covers.length &&
                                               covers[i].isNotEmpty
                                           ? Image.network(
@@ -581,12 +673,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                               fit: BoxFit.cover,
                                               errorBuilder: (_, _, _) =>
                                                   const Icon(
-                                                      Icons.music_note_rounded,
-                                                      size: 18,
-                                                      color: Colors.white38),
+                                                    Icons.music_note_rounded,
+                                                    size: 18,
+                                                    color: Colors.white38,
+                                                  ),
                                             )
-                                          : const Icon(Icons.music_note_rounded,
-                                              size: 18, color: Colors.white38),
+                                          : const Icon(
+                                              Icons.music_note_rounded,
+                                              size: 18,
+                                              color: Colors.white38,
+                                            ),
                                     ),
                                   ),
                                   title: Text(
@@ -600,16 +696,23 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                           : FontWeight.w500,
                                       color: isCurrent
                                           ? AppColors.brand
-                                          : Colors.white
-                                              .withValues(alpha: 0.88),
+                                          : Colors.white.withValues(
+                                              alpha: 0.88,
+                                            ),
                                     ),
                                   ),
                                   trailing: isCurrent
-                                      ? const Icon(Icons.graphic_eq_rounded,
-                                          size: 18, color: AppColors.brand)
+                                      ? Icon(
+                                          Icons.graphic_eq_rounded,
+                                          size: 18,
+                                          color: AppColors.brand,
+                                        )
                                       : IconButton(
-                                          icon: const Icon(Icons.close_rounded,
-                                              size: 17, color: Colors.white38),
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 17,
+                                            color: Colors.white38,
+                                          ),
                                           onPressed: () async {
                                             await service.removeFromQueue(i);
                                             if (service.queueLength == 0) {
@@ -648,9 +751,7 @@ class _VinylFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: AppColors.brandGradient,
-      ),
+      decoration: BoxDecoration(gradient: AppColors.brandGradient),
       child: const Center(
         child: Icon(Icons.music_note_rounded, color: Colors.white54, size: 64),
       ),

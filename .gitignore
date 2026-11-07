@@ -53,3 +53,8 @@ tool/test_cookie.txt
 build.log
 gradle-info*.log
 icon_master_1024.png
+
+# 签名密钥与凭据（不进仓库；密码走 GitHub Secrets）
+android/key.properties
+android/app/upload-keystore.jks
+*.jks

@@ -37,7 +37,7 @@
 - **Android**：`qq_music_ai-<版本>-android-arm64.apk`（大多数现代手机）/ `armeabi-v7a` / `x86_64`
 - **Windows**：`qq_music_ai-<版本>-windows-x64.zip`（解压后运行 `qq_music_ai.exe`）
 
-> APK 使用 debug 签名，安装时需允许「未知来源应用」。
+> APK 使用固定自签名密钥，升级版本可直接覆盖安装（首次安装需允许「未知来源应用」）。
 
 ## 🛠 从源码构建
 

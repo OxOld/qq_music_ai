@@ -182,7 +182,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 color: AppColors.brandSoft.withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(Icons.qr_code_scanner_rounded,
                       color: AppColors.brandDeep, size: 20),
@@ -305,7 +305,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
                       Icon(Icons.cookie_rounded,
                           color: AppColors.brand, size: 18),

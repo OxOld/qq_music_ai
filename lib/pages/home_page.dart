@@ -220,8 +220,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       await ref.read(playerServiceProvider).playUrl(url,
             title: song.name,
             cover: song.coverUrl);
-      if (!mounted) return;
-      AppToast.show(context, '正在播放：${song.name}');
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '$e', error: true);
@@ -355,7 +353,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: AppColors.brandGradient,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(28),
@@ -486,12 +484,12 @@ class _ExampleChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.tune_rounded,
+              Icon(Icons.tune_rounded,
                   size: 14, color: AppColors.brandDeep),
               const SizedBox(width: 5),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.brandDeep,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
@@ -868,7 +866,7 @@ class _SongRow extends StatelessWidget {
             child: Text(
               '$index',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.brand,
                 fontWeight: FontWeight.w800,
                 fontSize: 13,
@@ -951,7 +949,7 @@ class _OutlineButton extends StatelessWidget {
               const SizedBox(width: 7),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.brandDeep,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -1009,7 +1007,7 @@ class _MatchSection extends StatelessWidget {
                 ),
                 child: Text(
                   '$matched / ${results.length} 命中',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: AppColors.brandDeep,
@@ -1112,8 +1110,8 @@ class _MatchRow extends StatelessWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: () => onPlay(r),
-                  child: const Padding(
-                    padding: EdgeInsets.all(5),
+                  child: Padding(
+                    padding: const EdgeInsets.all(5),
                     child: Icon(Icons.play_arrow_rounded,
                         size: 20, color: AppColors.brandDeep),
                   ),
@@ -1245,7 +1243,7 @@ class _PlaylistPickerSheetState extends ConsumerState<_PlaylistPickerSheet> {
               ),
             ),
             const SizedBox(height: 14),
-            const Row(
+            Row(
               children: [
                 Icon(Icons.playlist_add_rounded,
                     color: AppColors.brandDeep, size: 21),
@@ -1351,12 +1349,12 @@ class _PlaylistPickerSheetState extends ConsumerState<_PlaylistPickerSheet> {
                             ? Image.network(
                                 p.coverUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Icon(
+                                errorBuilder: (_, _, _) => Icon(
                                     Icons.queue_music_rounded,
                                     size: 20,
                                     color: AppColors.brandDeep),
                               )
-                            : const Icon(Icons.queue_music_rounded,
+                            : Icon(Icons.queue_music_rounded,
                                 size: 20, color: AppColors.brandDeep),
                       ),
                     ),
@@ -1385,7 +1383,7 @@ class _PlaylistPickerSheetState extends ConsumerState<_PlaylistPickerSheet> {
                         ],
                       ),
                     ),
-                    const Icon(Icons.add_circle_outline_rounded,
+                    Icon(Icons.add_circle_outline_rounded,
                         size: 21, color: AppColors.brandDeep),
                   ],
                 ),
