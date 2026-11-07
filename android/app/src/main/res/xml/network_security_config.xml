@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仅对腾讯系域名放行明文 HTTP（QQ音乐 CDN 的音频流仍为 http://），
+     其余域名保持默认禁止 -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">qq.com</domain>
+        <domain includeSubdomains="true">qqmusic.qq.com</domain>
+        <domain includeSubdomains="true">tc.qq.com</domain>
+    </domain-config>
+</network-security-config>
