@@ -151,7 +151,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _buildTitleSection(),
         const SizedBox(height: 14),
         _buildProgress(service),
-        _buildControls(service),
+        // 底部多留一档呼吸空间（SafeArea 已吃掉系统手势条）
+        _buildControls(service, bottomPad: 26),
       ],
     );
   }
@@ -373,9 +374,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _buildControls(PlayerService service) {
+  Widget _buildControls(PlayerService service, {double bottomPad = 10}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(26, 6, 26, 10),
+      padding: EdgeInsets.fromLTRB(26, 6, 26, bottomPad),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
