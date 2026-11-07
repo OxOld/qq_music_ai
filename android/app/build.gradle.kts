@@ -35,9 +35,9 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
-            // audio_service/just_audio_background 运行时按资源名查找通知小图标
-            // （ic_notification），编译期无引用——R8/资源收缩会把它删掉，
-            // 导致媒体通知无 small icon：新系统直接 IllegalArgumentException 闪退。
+            // 保持关闭 R8/资源收缩：audio_service 运行时按资源名查通知小图标
+            // （ic_notification），裁剪/改名都有兼容性风险（实测 API 35 上
+            // 通知无 small icon 直接闪退）。省 5MB 不值得冒险。
             isMinifyEnabled = false
             isShrinkResources = false
         }

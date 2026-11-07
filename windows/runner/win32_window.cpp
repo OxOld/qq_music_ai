@@ -187,6 +187,17 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
+    case WM_GETMINMAXINFO: {
+      // 最小窗口尺寸（逻辑像素，按当前 DPI 缩放），
+      // 防止窗口被拖得过小导致布局挤压变形
+      UINT dpi = GetDpiForWindow(hwnd);
+      const float scale = static_cast<float>(dpi) / 96.0f;
+      auto info = reinterpret_cast<MINMAXINFO*>(lparam);
+      info->ptMinTrackSize.x = static_cast<LONG>(560 * scale);
+      info->ptMinTrackSize.y = static_cast<LONG>(480 * scale);
+      return 0;
+    }
+
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);
       LONG newWidth = newRectSize->right - newRectSize->left;
