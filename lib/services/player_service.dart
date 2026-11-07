@@ -22,12 +22,15 @@ class PlayerService {
     _indexSub = _player.currentIndexStream.listen((idx) {
       if (idx == null || idx == _index) return;
       _index = idx;
+      // 切歌（手动跳过 / 自动连播）立刻落盘：进度只记"现在这首"，
+      // 被切掉歌曲的中间进度不保留
+      unawaited(_persistQueue());
+      unawaited(_persistPosition());
       _notify();
     });
     // 整个队列播完：循环模式回到第一首，顺序模式停止
     _player.playerStateStream.listen((state) {
       if (state.processingState != ProcessingState.completed) return;
-      unawaited(_persistPosition());
       if (_mode == PlayMode.sequential) {
         stop();
       } else {
@@ -123,6 +126,8 @@ class PlayerService {
         ? covers
         : List.filled(urls.length, '');
     _index = startIndex.clamp(0, urls.length - 1);
+    // 新队列一律从头播：不携带重启恢复出的旧进度
+    _savedPosition = Duration.zero;
     await _buildAndLoad(_index, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -134,6 +139,7 @@ class PlayerService {
     _titles = [title ?? ''];
     _covers = [cover ?? ''];
     _index = 0;
+    _savedPosition = Duration.zero;
     await _buildAndLoad(0, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -179,6 +185,8 @@ class PlayerService {
     // 恢复的队列尚未加载音频源（vkey 链接有时效，过期则失败）
     if (_restoredPending && _queue.isNotEmpty) {
       await _buildAndLoad(_index, autoplay: true);
+      // 恢复出的进度只在这一步使用一次
+      _savedPosition = Duration.zero;
       return;
     }
     _player.play();
@@ -198,7 +206,10 @@ class PlayerService {
   }
 
   /// 拖动进度
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    await _player.seek(position);
+    unawaited(_persistPosition());
+  }
 
   Future<void> next() async {
     if (_queue.isEmpty) return;
@@ -283,8 +294,11 @@ class PlayerService {
     _index = 0;
     _playlist = null;
     _restoredPending = false;
+    _savedPosition = Duration.zero;
     await stop();
     unawaited(_persistQueue());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('player_position');
     _notify();
   }
 
