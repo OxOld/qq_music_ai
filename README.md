@@ -88,6 +88,13 @@ lib/
 └── pages/               # 首页 / 我的 / 播放页 / 歌单详情 / 登录 / 设置
 ```
 
+## 🙏 鸣谢
+
+- [simple-music](https://github.com/Yyyangshenghao/simple-music) — QQ 音乐网页版接口（musicu.fcg / fcg_user_created_diss / CgiGetDiss 等）的调用方式与参数形状参考
+- [QQ 音乐网页版](https://y.qq.com) — 接口来源；本项目的曲库匹配、歌单读写、播放链接均基于其 Web 端协议
+- [Flutter](https://flutter.dev) 与开源社区 — [just_audio](https://pub.dev/packages/just_audio) / [audio_service](https://pub.dev/packages/audio_service) / [flutter_inappwebview](https://pub.dev/packages/flutter_inappwebview) / [flutter_riverpod](https://pub.dev/packages/flutter_riverpod) 等优秀库
+- 感谢所有逆向协议与开源工具链贡献者的长期积累
+
 ## ⚠️ 免责声明
 
 - 本项目仅供 **个人学习与研究** 使用，请勿用于商业用途
