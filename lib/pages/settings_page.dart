@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
@@ -25,6 +26,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void initState() {
     super.initState();
     _loadConfig();
+    // 设置页保持打开时也要随主题重绘：路由 widget 是 const 规范化实例，
+    // 全局树重建会被跳过，只有 State 自己 setState 才可靠
+    AppColors.themeVersion.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadConfig() async {
@@ -54,168 +62,178 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
+    AppColors.themeVersion.removeListener(_onThemeChanged);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置', style: TextStyle(fontWeight: FontWeight.w800)),
-        centerTitle: true,
-        backgroundColor: AppColors.bg,
-        scrolledUnderElevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          // ---------- 主题色 ----------
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-            decoration: AppColors.card(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.palette_rounded,
-                      color: AppColors.brand,
-                      size: 20,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      '主题色',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '全局生效，重启后保持',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                SizedBox(height: 14),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 12,
-                  children: [
-                    for (final p in kThemePresets)
-                      _ThemeSwatch(
-                        preset: p,
-                        selected: p.id == AppColors.preset.id,
-                      ),
-                  ],
-                ),
-              ],
-            ),
+    // 状态栏黑色图标（浅色底）
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: kStatusOverlayDark,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            '设置',
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          SizedBox(height: 12),
-
-          // ---------- 配置卡片 ----------
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-            decoration: AppColors.card(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.smart_toy_rounded,
-                      color: AppColors.brand,
-                      size: 20,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'AI 服务配置',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+          centerTitle: true,
+          backgroundColor: AppColors.bg,
+          scrolledUnderElevation: 0,
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            // ---------- 主题色 ----------
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+              decoration: AppColors.card(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.palette_rounded,
+                        color: AppColors.brand,
+                        size: 20,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '兼容 OpenAI 协议的服务均可接入',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
+                      SizedBox(width: 8),
+                      Text(
+                        '主题色',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                _FieldLabel(icon: Icons.link_rounded, text: '服务地址'),
-                TextField(
-                  controller: _baseUrlController,
-                  style: const TextStyle(fontSize: 13.5),
-                  decoration: const InputDecoration(
-                    hintText: 'https://api.deepseek.com/v1',
-                  ),
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                _FieldLabel(icon: Icons.key_rounded, text: 'API Key'),
-                TextField(
-                  controller: _apiKeyController,
-                  obscureText: true,
-                  style: const TextStyle(fontSize: 13.5),
-                  decoration: const InputDecoration(hintText: 'sk-…'),
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                _FieldLabel(icon: Icons.memory_rounded, text: '模型名称'),
-                TextField(
-                  controller: _modelController,
-                  style: const TextStyle(fontSize: 13.5),
-                  decoration: const InputDecoration(hintText: 'deepseek-flash'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // ---------- 隐私说明 ----------
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.brandSoft.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.shield_rounded,
-                  color: AppColors.brandDeep,
-                  size: 20,
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
-                    'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
+                  SizedBox(height: 4),
+                  Text(
+                    '全局生效，重启后保持',
                     style: TextStyle(
                       fontSize: 12.5,
                       color: AppColors.textSecondary,
-                      height: 1.55,
                     ),
                   ),
-                ),
-              ],
+                  SizedBox(height: 14),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    children: [
+                      for (final p in kThemePresets)
+                        _ThemeSwatch(
+                          preset: p,
+                          selected: p.id == AppColors.preset.id,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          _SaveButton(saving: _saving, onSave: _save),
-        ],
+            SizedBox(height: 12),
+
+            // ---------- 配置卡片 ----------
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              decoration: AppColors.card(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.smart_toy_rounded,
+                        color: AppColors.brand,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'AI 服务配置',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '兼容 OpenAI 协议的服务均可接入',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _FieldLabel(icon: Icons.link_rounded, text: '服务地址'),
+                  TextField(
+                    controller: _baseUrlController,
+                    style: const TextStyle(fontSize: 13.5),
+                    decoration: const InputDecoration(
+                      hintText: 'https://api.deepseek.com/v1',
+                    ),
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  _FieldLabel(icon: Icons.key_rounded, text: 'API Key'),
+                  TextField(
+                    controller: _apiKeyController,
+                    obscureText: true,
+                    style: const TextStyle(fontSize: 13.5),
+                    decoration: const InputDecoration(hintText: 'sk-…'),
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  _FieldLabel(icon: Icons.memory_rounded, text: '模型名称'),
+                  TextField(
+                    controller: _modelController,
+                    style: const TextStyle(fontSize: 13.5),
+                    decoration: const InputDecoration(
+                      hintText: 'deepseek-flash',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ---------- 隐私说明 ----------
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.brandSoft.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.shield_rounded,
+                    color: AppColors.brandDeep,
+                    size: 20,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
+                      'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                        height: 1.55,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _SaveButton(saving: _saving, onSave: _save),
+          ],
+        ),
       ),
     );
   }
@@ -230,44 +248,56 @@ class _ThemeSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: () async {
-        if (selected) return;
-        await AppColors.applyPreset(preset);
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [preset.brand, preset.brandDeep],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return Column(
+      children: [
+        // 本地透明 Material 承载 Ink：装饰与涟漪都画在它自己身上。
+        // 直接挂页面级 Material 时，Ink 在 ListView 里会拿到过期变换、画错位置
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: selected ? null : () => AppColors.applyPreset(preset),
+            child: Ink(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [preset.brand, preset.brandDeep],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                // 选中态：品牌色柔光（不用黑圈，和彩色圆不搭）
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: preset.brand.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
               ),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: selected ? AppColors.textPrimary : Colors.transparent,
-                width: 2.5,
-              ),
-            ),
-            child: selected
-                ? const Icon(Icons.check_rounded, color: Colors.white, size: 24)
-                : null,
-          ),
-          SizedBox(height: 5),
-          Text(
-            preset.name,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-              color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+              child: selected
+                  ? const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    )
+                  : null,
             ),
           ),
-        ],
-      ),
+        ),
+        SizedBox(height: 5),
+        Text(
+          preset.name,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+            color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

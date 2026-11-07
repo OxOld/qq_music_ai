@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
@@ -38,40 +39,44 @@ class _RootPageState extends State<RootPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
-          HomePage(),
-          MinePage(key: _mineKey),
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MiniPlayer(),
-          NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (i) {
-              setState(() => _index = i);
-              // 切到「我的」时刷新歌单列表（首页添加/创建后能立刻看到）
-              if (i == 1) _mineKey.currentState?.refresh();
-            },
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: '首页',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: '我的',
-              ),
-            ],
-          ),
-        ],
+    // 状态栏白色图标（顶部为品牌渐变）
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: kStatusOverlayLight,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _index,
+          children: [
+            // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
+            HomePage(),
+            MinePage(key: _mineKey),
+          ],
+        ),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MiniPlayer(),
+            NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (i) {
+                setState(() => _index = i);
+                // 切到「我的」时刷新歌单列表（首页添加/创建后能立刻看到）
+                if (i == 1) _mineKey.currentState?.refresh();
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: '首页',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: '我的',
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

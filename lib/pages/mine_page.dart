@@ -112,7 +112,7 @@ class MinePageState extends ConsumerState<MinePage> {
   void _goToLogin() async {
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const LoginPage()));
+    ).push(MaterialPageRoute(builder: (_) => LoginPage()));
     // 登录页返回后刷新
     _loadIfLoggedIn();
     setState(() {});
@@ -590,7 +590,7 @@ class MinePageState extends ConsumerState<MinePage> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const SettingsPage(),
+                                builder: (_) => SettingsPage(),
                               ),
                             );
                           },

@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 状态栏：品牌渐变头部页（首页/我的/播放页/歌单详情）— 白色图标
+const kStatusOverlayLight = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.light, // Android 白色图标
+  statusBarBrightness: Brightness.dark, // iOS 白色图标
+);
+
+/// 状态栏：浅色底页面（设置/登录）— 黑色图标
+const kStatusOverlayDark = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.dark, // Android 黑色图标
+  statusBarBrightness: Brightness.light, // iOS 黑色图标
+);
 
 /// 主题预设：主色 / 深色 / 浅底三件套
 class ThemePreset {
@@ -133,8 +148,14 @@ abstract final class AppColors {
   );
 }
 
-/// 全局主题
+final Map<String, ThemeData> _themeCache = <String, ThemeData>{};
+
+/// 全局主题（按预设缓存：ThemeData 构建较重，切过的不再重复构建）
 ThemeData buildAppTheme() {
+  return _themeCache.putIfAbsent(AppColors.preset.id, _buildTheme);
+}
+
+ThemeData _buildTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AppColors.brand,
     primary: AppColors.brand,

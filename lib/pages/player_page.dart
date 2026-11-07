@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:palette_generator/palette_generator.dart';
 
@@ -163,19 +164,23 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
 
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [_bgTop, _bgBottom],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+    // 状态栏白色图标（顶部为品牌渐变）
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: kStatusOverlayLight,
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [_bgTop, _bgBottom],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: isLandscape
-              ? _buildLandscape(service, size)
-              : _buildPortrait(service),
+          child: SafeArea(
+            child: isLandscape
+                ? _buildLandscape(service, size)
+                : _buildPortrait(service),
+          ),
         ),
       ),
     );
@@ -294,9 +299,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     ? Image.network(
                         _cover!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const _VinylFallback(),
+                        errorBuilder: (_, _, _) => _VinylFallback(),
                       )
-                    : const _VinylFallback(),
+                    : _VinylFallback(),
               ),
             ),
             // 中心圆孔

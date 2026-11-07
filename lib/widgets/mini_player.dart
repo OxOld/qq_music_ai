@@ -74,7 +74,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
   void _openPlayer() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PlayerPage()),
+      MaterialPageRoute(builder: (_) => PlayerPage()),
     );
   }
 

@@ -254,13 +254,13 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   void _goToLogin() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(builder: (_) => LoginPage()),
     );
   }
 
   void _goToSettings() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SettingsPage()),
+      MaterialPageRoute(builder: (_) => SettingsPage()),
     );
   }
 
@@ -272,7 +272,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 顶部固定 + 下方滚动
     return Column(
       children: [
-        const _Header(),
+        _Header(),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -294,7 +294,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ],
 
               // ---------- AI 生成中 ----------
-              if (_loading) const _LoadingCard(),
+              if (_loading) _LoadingCard(),
 
               // ---------- 歌单 ----------
               if (_playlist != null) ...[
