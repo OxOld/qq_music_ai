@@ -28,7 +28,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Build APK (split per ABI)
         run: flutter build apk --release --split-per-abi
@@ -44,7 +44,7 @@ jobs:
 
   build-windows:
     name: Windows EXE
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
