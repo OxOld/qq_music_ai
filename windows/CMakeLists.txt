@@ -32,6 +32,13 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# MSVC：源码/执行字符集统一 UTF-8。
+# runner 源码是 UTF-8（无 BOM）且含中文窗口标题字面量，
+# 不加此参数 CI 的英文环境会按本地代码页解析，标题变乱码。
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

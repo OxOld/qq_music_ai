@@ -34,8 +34,8 @@
 
 前往 [Releases](../../releases) 页面下载：
 
-- **Android**：`app-arm64-v8a-release.apk`（大多数现代手机）/ `armeabi-v7a` / `x86_64`
-- **Windows**：`qq_music_ai-windows-x64.zip`（解压后运行 `qq_music_ai.exe`）
+- **Android**：`qq_music_ai-<版本>-android-arm64.apk`（大多数现代手机）/ `armeabi-v7a` / `x86_64`
+- **Windows**：`qq_music_ai-<版本>-windows-x64.zip`（解压后运行 `qq_music_ai.exe`）
 
 > APK 使用 debug 签名，安装时需允许「未知来源应用」。
 

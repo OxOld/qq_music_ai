@@ -1,8 +1,8 @@
 name: Build
 
+# 只在打 v* 标签（或手动触发）时构建发布，普通 push 不跑
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -12,6 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            # 手动触发时退回 pubspec 里的版本
+            V=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1)
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -31,22 +43,44 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Build APK (split per ABI)
-        run: flutter build apk --release --split-per-abi
+        run: |
+          flutter build apk --release --split-per-abi \
+            --build-name="${{ steps.ver.outputs.version }}" \
+            --build-number="${{ github.run_number }}"
+
+      - name: Rename artifacts
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          cd build/app/outputs/flutter-apk
+          cp app-arm64-v8a-release.apk   "../../../../qq_music_ai-${V}-android-arm64.apk"
+          cp app-armeabi-v7a-release.apk "../../../../qq_music_ai-${V}-android-armeabi-v7a.apk"
+          cp app-x86_64-release.apk      "../../../../qq_music_ai-${V}-android-x86_64.apk"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: apk-release
           path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
+            qq_music_ai-*android-arm64.apk
+            qq_music_ai-*android-armeabi-v7a.apk
+            qq_music_ai-*android-x86_64.apk
 
   build-windows:
     name: Windows EXE
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1)
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: subosito/flutter-action@v2
         with:
@@ -61,18 +95,22 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows
-        run: flutter build windows --release
+        run: |
+          flutter build windows --release `
+            --build-name="${{ steps.ver.outputs.version }}" `
+            --build-number="${{ github.run_number }}"
 
       - name: Zip bundle
         shell: pwsh
         run: |
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "qq_music_ai-windows-x64.zip"
+          $v = "${{ steps.ver.outputs.version }}"
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "qq_music_ai-${v}-windows-x64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: qq_music_ai-windows-x64.zip
+          path: qq_music_ai-*windows-x64.zip
 
   release:
     name: GitHub Release
