@@ -1351,7 +1351,7 @@ class _PlaylistPickerSheetState extends ConsumerState<_PlaylistPickerSheet> {
                             ? Image.network(
                                 p.coverUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
+                                errorBuilder: (_, _, _) => const Icon(
                                     Icons.queue_music_rounded,
                                     size: 20,
                                     color: AppColors.brandDeep),

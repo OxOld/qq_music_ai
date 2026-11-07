@@ -22,7 +22,7 @@ class PlaylistDetailPage extends ConsumerStatefulWidget {
 class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   List<QQSong>? _songs;
   bool _loading = false;
-  bool _playingAll = false;
+  final bool _playingAll = false;
   String? _error;
   int? _preparingIndex; // 正在预取播放链接的行
 
@@ -176,7 +176,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                           ? Image.network(
                               p.coverUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
+                              errorBuilder: (_, _, _) => const Icon(
                                   Icons.queue_music_rounded,
                                   color: Colors.white),
                             )
@@ -324,7 +324,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                                 s.coverUrl!,
                                                 fit: BoxFit.cover,
                                                 errorBuilder:
-                                                    (_, __, ___) =>
+                                                    (_, _, _) =>
                                                         const Icon(
                                                   Icons
                                                       .music_note_rounded,

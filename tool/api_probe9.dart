@@ -27,36 +27,6 @@ Future<void> main() async {
     '欧若拉 张韶涵',
   ];
 
-  Future<int> searchOnce(http.Client c, Map<String, String> headers,
-      {bool withComm = false}) async {
-    final body = {
-      'req_1': {
-        'module': 'music.search.SearchCgiService',
-        'method': 'DoSearchForQQMusicDesktop',
-        'param': {
-          'query': '东风破 周杰伦',
-          'num_per_page': 5,
-          'page_num': 1,
-          'search_type': 0,
-          'grp': 1,
-        },
-      },
-    };
-    if (withComm) {
-      body['comm'] = {'ct': 24, 'cv': 4747474, 'uin': uin, 'authst': keyst};
-    }
-    final resp = await c
-        .post(
-          Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg'),
-          headers: {...headers, 'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 15));
-    final data = jsonDecode(utf8.decode(resp.bodyBytes));
-    final list = data['req_1']?['data']?['body']?['song']?['list'];
-    return list is List ? list.length : -1; // -1 = 结构异常
-  }
-
   final c = http.Client();
 
   // ---------- A. 匿名连续 7 次不同查询（模拟 app 当前行为） ----------

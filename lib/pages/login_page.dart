@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,44 @@ import '../providers/providers.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_toast.dart';
+
+/// 冻结页面可见性感知：
+/// QQ 登录脚本（c_login_2.js）监听 visibilitychange——切后台即作废二维码
+/// （hidden → cancle_qrlogin），回前台立即重新生成（visible → begin_qrlogin），
+/// 导致「秒切换应用回来二维码就变了」。在页面脚本运行前注入本脚本，
+/// 让它永远认为页面可见、且收不到 visibilitychange 注册，
+/// 二维码只在真正过期（约 2 分钟）时才由其轮询逻辑刷新。
+const String _kVisibilityFreezeScript = '''
+(function(){
+  try {
+    // 0) 捕获阶段拦截 visibilitychange（window 上最早触发，
+    //    document 上的任何监听器都收不到该事件）
+    var nativeAdd = EventTarget.prototype.addEventListener;
+    nativeAdd.call(window, 'visibilitychange', function(e){
+      e.stopImmediatePropagation();
+    }, true);
+    // 1) 页面永远读到"可见"
+    var def = function(obj, name, val){
+      try { Object.defineProperty(obj, name, { get: function(){ return val; }, configurable: true }); } catch(e){}
+    };
+    def(document, 'hidden', false);
+    def(document, 'webkitHidden', false);
+    def(document, 'visibilityState', 'visible');
+    def(document, 'webkitVisibilityState', 'visible');
+    try { document.hasFocus = function(){ return true; }; } catch(e){}
+    // 2) 阻止页面脚本再注册可见性相关监听
+    EventTarget.prototype.addEventListener = function(type, fn, opts){
+      if (type === 'visibilitychange' || type === 'freeze') { return; }
+      return nativeAdd.call(this, type, fn, opts);
+    };
+    try {
+      Object.defineProperty(document, 'onvisibilitychange', {
+        set: function(){}, get: function(){ return null; }, configurable: true
+      });
+    } catch(e){}
+  } catch(e){}
+})();
+''';
 
 /// QQ 音乐登录页：内嵌 WebView 扫码登录，登录后抓取 Cookie
 ///
@@ -77,7 +117,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
     }
 
-    if (!context.mounted) return;
+    if (!mounted) return;
     setState(() => _saving = false);
     if (ok) {
       AppToast.show(context, '登录成功', success: true);
@@ -204,7 +244,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   await CookieManager.instance().deleteAllCookies();
                   await ref.read(qqAuthProvider.notifier).logout();
                   _webController?.reload();
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   AppToast.show(context, '已清理，可切换账号重新登录',
                       success: true);
                 },
@@ -237,6 +277,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     supportMultipleWindows: true,
                     javaScriptCanOpenWindowsAutomatically: true,
                   ),
+                  // 在页面脚本前注入：屏蔽可见性变化，防止切后台二维码被作废刷新
+                  initialUserScripts: UnmodifiableListView<UserScript>([
+                    UserScript(
+                      source: _kVisibilityFreezeScript,
+                      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+                      forMainFrameOnly: false,
+                    ),
+                  ]),
                   onCreateWindow: (controller, createWindowRequest) async {
                     // 登录弹窗在当前 WebView 内打开
                     await controller.loadUrl(

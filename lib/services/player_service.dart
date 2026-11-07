@@ -288,12 +288,6 @@ class PlayerService {
     _notify();
   }
 
-  void _onStateChanged(PlayerState state) {
-    if (state.processingState == ProcessingState.completed) {
-      unawaited(_persistPosition());
-    }
-  }
-
   void _notify() => _changes.add(null);
 
   // ---------- 持久化 ----------

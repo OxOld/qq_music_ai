@@ -245,7 +245,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     ? Image.network(
                         _cover!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const _VinylFallback(),
+                        errorBuilder: (_, _, _) => const _VinylFallback(),
                       )
                     : const _VinylFallback(),
               ),
@@ -578,7 +578,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                           ? Image.network(
                                               covers[i],
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
+                                              errorBuilder: (_, _, _) =>
                                                   const Icon(
                                                       Icons.music_note_rounded,
                                                       size: 18,

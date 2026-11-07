@@ -680,7 +680,7 @@ class _PlaylistTile extends StatelessWidget {
                         ? Image.network(
                             playlist.coverUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            errorBuilder: (_, _, _) => const Icon(
                                 Icons.queue_music_rounded,
                                 color: AppColors.brandDeep),
                           )
