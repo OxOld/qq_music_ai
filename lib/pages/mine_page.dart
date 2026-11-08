@@ -473,7 +473,7 @@ class MinePageState extends ConsumerState<MinePage> {
                         _MenuRow(
                           icon: Icons.settings_rounded,
                           label: '设置',
-                          subtitle: 'AI 服务配置（API Key / 模型）',
+                          subtitle: '主题色 · AI 服务 · 应用更新',
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => SettingsPage()),

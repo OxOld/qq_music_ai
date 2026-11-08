@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
 import '../services/settings_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/app_update.dart';
 
 /// 设置页：配置 LLM（base_url / api_key / model）
 class SettingsPage extends ConsumerStatefulWidget {
@@ -21,14 +23,42 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _modelController = TextEditingController();
 
   bool _saving = false;
+  String _version = ''; // 当前应用版本（异步取）
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
     super.initState();
     _loadConfig();
+    _loadVersion();
     // 设置页保持打开时也要随主题重绘：路由 widget 是 const 规范化实例，
     // 全局树重建会被跳过，只有 State 自己 setState 才可靠
     AppColors.themeVersion.addListener(_onThemeChanged);
+  }
+
+  Future<void> _loadVersion() async {
+    final v = await ref.read(updateServiceProvider).currentVersion();
+    if (!mounted) return;
+    setState(() => _version = v);
+  }
+
+  /// 手动检查更新：有新版本走完整更新流程
+  Future<void> _checkUpdate() async {
+    setState(() => _checkingUpdate = true);
+    try {
+      final update = await ref.read(updateServiceProvider).check();
+      if (!mounted) return;
+      if (update == null) {
+        AppToast.show(context, '已是最新版本', success: true);
+        return;
+      }
+      await runAppUpdateFlow(context, ref, update);
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, '检查更新失败：$e', error: true);
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
   }
 
   void _onThemeChanged() {
@@ -195,43 +225,85 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       hintText: 'deepseek-flash',
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ---------- 隐私说明 ----------
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.brandSoft.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.shield_rounded,
-                    color: AppColors.brandDeep,
-                    size: 20,
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
-                      'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                        height: 1.55,
-                      ),
+                  const SizedBox(height: 16),
+                  // 保存按钮收进卡片内，与「应用更新」卡片结构一致
+                  _SaveButton(saving: _saving, onSave: _save),
+                  const SizedBox(height: 12),
+                  // 支持服务与 Key 安全说明（AI 配置的附注）
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandSoft.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.shield_rounded,
+                          color: AppColors.brandDeep,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
+                            'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.textSecondary,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
+            // ---------- 应用更新 ----------
             const SizedBox(height: 24),
-            _SaveButton(saving: _saving, onSave: _save),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: AppColors.card(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.system_update_alt_rounded,
+                        color: AppColors.brand,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '应用更新',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _version.isEmpty ? '当前版本 …' : '当前版本 v$_version',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _CheckUpdateButton(
+                    checking: _checkingUpdate,
+                    onTap: _checkUpdate,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -377,6 +449,71 @@ class _SaveButton extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 检查更新按钮（品牌渐变胶囊，同保存按钮风格）
+class _CheckUpdateButton extends StatelessWidget {
+  final bool checking;
+  final VoidCallback onTap;
+
+  const _CheckUpdateButton({required this.checking, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brand.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: checking ? null : onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (checking)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: Colors.white,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.manage_search_rounded,
+                    size: 19,
+                    color: Colors.white,
+                  ),
+                const SizedBox(width: 8),
+                Text(
+                  checking ? '检查中…' : '检查更新',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
                   ),

@@ -63,7 +63,7 @@ Future<bool> showAppConfirmDialog(
             Row(
               children: [
                 Expanded(
-                  child: _DialogButton(
+                  child: AppDialogButton(
                     label: cancelLabel,
                     soft: true,
                     onTap: () => Navigator.pop(ctx, false),
@@ -71,7 +71,7 @@ Future<bool> showAppConfirmDialog(
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _DialogButton(
+                  child: AppDialogButton(
                     label: confirmLabel,
                     danger: danger,
                     onTap: () => Navigator.pop(ctx, true),
@@ -144,17 +144,106 @@ void showAppProgressDialog(BuildContext context, String message) {
   );
 }
 
+/// 发现新版本弹窗：更新说明可滚动；返回 true = 立即更新
+Future<bool> showAppUpdateDialog(
+  BuildContext context, {
+  required String version,
+  required String notes,
+}) async {
+  final go = await showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black38,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 560),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.brandSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.system_update_alt_rounded,
+                  size: 22,
+                  color: AppColors.brandDeep,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '发现新版本 v$version',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      notes.trim().isEmpty
+                          ? '体验优化与问题修复'
+                          : notes.trim().replaceAll('**', ''),
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.55,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppDialogButton(
+                      label: '下次再说',
+                      soft: true,
+                      onTap: () => Navigator.pop(ctx, false),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppDialogButton(
+                      label: '立即更新',
+                      onTap: () => Navigator.pop(ctx, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  return go == true;
+}
+
 /// 胶囊弹窗按钮：soft=浅底取消键；danger=红底确认键；默认品牌渐变。
 /// 一次性触发锁：弹窗退出动画期间按钮仍挂在树上，连点会误 pop 弹窗
 /// 底下的页面（触发 framework 的 _dependents.isEmpty 断言），只允许触发一次。
-class _DialogButton extends StatefulWidget {
+class AppDialogButton extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
   final bool soft;
   final bool danger;
   final bool enabled;
 
-  const _DialogButton({
+  const AppDialogButton({
+    super.key,
     required this.label,
     required this.onTap,
     this.soft = false,
@@ -163,10 +252,10 @@ class _DialogButton extends StatefulWidget {
   });
 
   @override
-  State<_DialogButton> createState() => _DialogButtonState();
+  State<AppDialogButton> createState() => AppDialogButtonState();
 }
 
-class _DialogButtonState extends State<_DialogButton> {
+class AppDialogButtonState extends State<AppDialogButton> {
   bool _fired = false;
 
   void _handle() {
@@ -344,7 +433,7 @@ class _AppInputDialogState extends State<_AppInputDialog> {
             Row(
               children: [
                 Expanded(
-                  child: _DialogButton(
+                  child: AppDialogButton(
                     label: '取消',
                     soft: true,
                     onTap: () => Navigator.pop(context),
@@ -352,7 +441,7 @@ class _AppInputDialogState extends State<_AppInputDialog> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _DialogButton(
+                  child: AppDialogButton(
                     label: widget.confirmLabel,
                     onTap: _submit,
                     enabled: canSave,
