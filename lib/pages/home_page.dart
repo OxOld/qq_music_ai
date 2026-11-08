@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/playlist.dart';
 import '../models/qq_song.dart';
 import '../providers/providers.dart';
+import '../services/battery_service.dart';
 import '../services/match_service.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
@@ -227,6 +230,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final auth = ref.read(qqAuthProvider);
     final song = r.matched;
     if (song == null || _loadingPlayMid != null || _playAllLoading) return;
+    unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _loadingPlayMid = song.mid);
     try {
       final url = await ref
@@ -247,6 +251,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final auth = ref.read(qqAuthProvider);
     final results = _matchResults;
     if (results == null || _playAllLoading) return;
+    unawaited(BatteryService.maybePromptOnPlay(context));
     final matched = results
         .where((r) => r.isMatched)
         .map((r) => r.matched!)

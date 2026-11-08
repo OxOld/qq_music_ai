@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
+import '../services/battery_service.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
@@ -17,7 +18,8 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage> {
+class _SettingsPageState extends ConsumerState<SettingsPage>
+    with WidgetsBindingObserver {
   final _baseUrlController = TextEditingController();
   final _apiKeyController = TextEditingController();
   final _modelController = TextEditingController();
@@ -25,15 +27,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _saving = false;
   String _version = ''; // 当前应用版本（异步取）
   bool _checkingUpdate = false;
+  bool _batteryIgnoring = true; // 省电策略是否已豁免（异步取，先按已允许渲染）
 
   @override
   void initState() {
     super.initState();
     _loadConfig();
     _loadVersion();
+    _loadBatteryState();
+    // 从系统授权弹窗返回时刷新豁免状态
+    WidgetsBinding.instance.addObserver(this);
     // 设置页保持打开时也要随主题重绘：路由 widget 是 const 规范化实例，
     // 全局树重建会被跳过，只有 State 自己 setState 才可靠
     AppColors.themeVersion.addListener(_onThemeChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadBatteryState();
+  }
+
+  Future<void> _loadBatteryState() async {
+    final ok = await BatteryService.isIgnoring();
+    if (!mounted) return;
+    setState(() => _batteryIgnoring = ok);
+  }
+
+  Future<void> _requestBatteryIgnore() async {
+    // 系统弹窗会覆盖应用；返回后由生命周期回调刷新状态
+    await BatteryService.requestIgnore();
   }
 
   Future<void> _loadVersion() async {
@@ -92,6 +114,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     AppColors.themeVersion.removeListener(_onThemeChanged);
     super.dispose();
   }
@@ -259,6 +282,58 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ],
                     ),
                   ),
+                ],
+              ),
+            ),
+            // ---------- 后台播放 ----------
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: AppColors.card(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.bolt_rounded,
+                        color: AppColors.brand,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '后台播放',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _batteryIgnoring ? '已允许后台运行' : '未开启',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _batteryIgnoring
+                              ? AppColors.success
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '熄屏连续播放需要加入电池优化豁免（省电策略「不限制」）',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  if (!_batteryIgnoring) ...[
+                    const SizedBox(height: 12),
+                    _BatteryButton(onTap: _requestBatteryIgnore),
+                  ],
                 ],
               ),
             ),
@@ -449,6 +524,56 @@ class _SaveButton extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 后台播放设置按钮（品牌渐变胶囊，同检查更新按钮风格）
+class _BatteryButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _BatteryButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brand.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.bolt_rounded, size: 19, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  '设置为不限制',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
                   ),

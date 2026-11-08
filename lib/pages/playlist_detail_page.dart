@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/qq_song.dart';
 import '../providers/providers.dart';
+import '../services/battery_service.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
@@ -110,6 +113,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     final songs = _songs;
     if (songs == null || songs.isEmpty || index >= songs.length) return;
     if (_preparingIndex != null) return;
+    unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _preparingIndex = index);
     try {
       final (urls, titles, covers, indexMap) = await _prepareQueue(songs);
@@ -138,6 +142,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     final songs = _songs;
     if (songs == null || songs.isEmpty) return;
     if (_preparingIndex != null) return;
+    unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _preparingIndex = 0);
     try {
       final (urls, titles, covers, indexMap) = await _prepareQueue(songs);
