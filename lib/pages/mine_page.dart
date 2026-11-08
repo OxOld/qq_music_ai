@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
 import 'login_page.dart';
 import 'playlist_detail_page.dart';
@@ -62,38 +63,13 @@ class MinePageState extends ConsumerState<MinePage> {
   }
 
   Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text(
-          '退出登录',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-        content: const Text(
-          '退出后需要重新扫码登录，确定吗？',
-          style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              '退出',
-              style: TextStyle(
-                color: AppColors.danger,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: '退出登录',
+      message: '退出后需要重新扫码登录，确定吗？',
+      confirmLabel: '退出',
+      danger: true,
+      icon: Icons.logout_rounded,
     );
     if (confirmed != true) return;
     // 同步清理 WebView Cookie，否则重新登录会自动抓回旧账号
@@ -158,6 +134,15 @@ class MinePageState extends ConsumerState<MinePage> {
   // ---------- 歌单操作（改名 / 删除） ----------
 
   void _showPlaylistActions(MyPlaylist playlist) {
+    // 一次性触发锁：弹层退出动画期间 ListTile 仍可点，连点会误 pop 底下的页面
+    var actionTaken = false;
+    void take(BuildContext sheetContext, VoidCallback action) {
+      if (actionTaken) return;
+      actionTaken = true;
+      Navigator.pop(sheetContext);
+      action();
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -202,10 +187,7 @@ class MinePageState extends ConsumerState<MinePage> {
                 '修改名称',
                 style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
               ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _renamePlaylist(playlist);
-              },
+              onTap: () => take(sheetCtx, () => _renamePlaylist(playlist)),
             ),
             ListTile(
               leading: const Icon(
@@ -221,10 +203,7 @@ class MinePageState extends ConsumerState<MinePage> {
                   color: AppColors.danger,
                 ),
               ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _deletePlaylist(playlist);
-              },
+              onTap: () => take(sheetCtx, () => _deletePlaylist(playlist)),
             ),
             const SizedBox(height: 8),
           ],
@@ -234,80 +213,17 @@ class MinePageState extends ConsumerState<MinePage> {
   }
 
   Future<void> _renamePlaylist(MyPlaylist playlist) async {
-    final controller = TextEditingController(text: playlist.name);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text(
-          '修改歌单名称',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 40,
-          style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: '输入新名称',
-            filled: true,
-            fillColor: AppColors.bg,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            counterText: '',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final v = controller.text.trim();
-              if (v.isNotEmpty) Navigator.pop(dialogCtx, v);
-            },
-            child: Text(
-              '保存',
-              style: TextStyle(
-                color: AppColors.brandDeep,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final newName = await showAppInputDialog(
+      context,
+      title: '修改歌单名称',
+      initialText: playlist.name,
+      hintText: '输入新名称',
+      confirmLabel: '保存',
     );
-    controller.dispose();
     if (newName == null || newName == playlist.name || !mounted) return;
 
     // 改名 = 读歌 → 新名重建 → 迁移 → 删旧（官方无独立改名接口）
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(18)),
-        ),
-        content: SizedBox(
-          width: 60,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Expanded(child: Text('正在迁移歌曲…', style: TextStyle(fontSize: 14))),
-            ],
-          ),
-        ),
-      ),
-    );
+    showAppProgressDialog(context, '正在迁移歌曲…');
 
     try {
       await ref
@@ -329,42 +245,13 @@ class MinePageState extends ConsumerState<MinePage> {
   }
 
   Future<void> _deletePlaylist(MyPlaylist playlist) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text(
-          '删除歌单',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          '确定删除「${playlist.name}」吗？\n该操作不可恢复。',
-          style: const TextStyle(
-            fontSize: 13.5,
-            height: 1.5,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text(
-              '删除',
-              style: TextStyle(
-                color: AppColors.danger,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: '删除歌单',
+      message: '确定删除「${playlist.name}」吗？\n该操作不可恢复。',
+      confirmLabel: '删除',
+      danger: true,
+      icon: Icons.delete_outline_rounded,
     );
     if (confirmed != true || !mounted) return;
 
@@ -589,9 +476,7 @@ class MinePageState extends ConsumerState<MinePage> {
                           subtitle: 'AI 服务配置（API Key / 模型）',
                           onTap: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => SettingsPage(),
-                              ),
+                              MaterialPageRoute(builder: (_) => SettingsPage()),
                             );
                           },
                         ),

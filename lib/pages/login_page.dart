@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
 
 /// 冻结页面可见性感知：
@@ -217,48 +218,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (dialogCtx) => AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        title: const Text(
-                          '清理登录状态',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        content: const Text(
+                    final confirmed = await showAppConfirmDialog(
+                      context,
+                      title: '清理登录状态',
+                      message:
                           '将清除 WebView Cookie 与本机保存的登录态，'
                           '用于切换 QQ 账号。确定吗？',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            height: 1.5,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogCtx, false),
-                            child: const Text(
-                              '取消',
-                              style: TextStyle(color: AppColors.textSecondary),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogCtx, true),
-                            child: const Text(
-                              '清理',
-                              style: TextStyle(
-                                color: AppColors.danger,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      confirmLabel: '清理',
+                      danger: true,
+                      icon: Icons.cleaning_services_rounded,
                     );
                     if (confirmed != true || !mounted) return;
                     await CookieManager.instance().deleteAllCookies();
