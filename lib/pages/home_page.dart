@@ -501,10 +501,8 @@ class _PromptCard extends StatelessWidget {
               for (final e in examples)
                 _ExampleChip(
                   label: e,
-                  onTap: () {
-                    controller.text = e;
-                    onGenerate();
-                  },
+                  // 只填充输入框，由用户自己点「生成歌单」触发
+                  onTap: () => controller.text = e,
                 ),
             ],
           ),

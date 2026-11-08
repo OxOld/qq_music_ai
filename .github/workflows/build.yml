@@ -49,12 +49,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          # 缓存 Gradle 依赖（AGP/Kotlin 编译器等，避免每次全量下载触发 504）
+          cache: gradle
 
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.4'
           channel: stable
           cache: true
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
 
       - name: Pub get
         run: flutter pub get
@@ -107,6 +116,13 @@ jobs:
           flutter-version: '3.41.4'
           channel: stable
           cache: true
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop

@@ -26,8 +26,7 @@ typedef MatchProgressCallback = void Function(int index, MatchResult? result);
 
 /// 把 AI 生成的歌单（歌名+歌手）匹配成 QQ 音乐真实歌曲
 class MatchService {
-  MatchService({QQMusicClient? client})
-      : _client = client ?? QQMusicClient();
+  MatchService({QQMusicClient? client}) : _client = client ?? QQMusicClient();
 
   final QQMusicClient _client;
 
@@ -45,13 +44,22 @@ class MatchService {
     Playlist playlist, {
     QQAuthState? auth,
     MatchProgressCallback? onProgress,
+  }) {
+    return matchSongs(playlist.songs, auth: auth, onProgress: onProgress);
+  }
+
+  /// 匹配任意一组歌曲（歌单详情页的 AI 补充等场景复用节流/重试/限流判定）
+  Future<List<MatchResult>> matchSongs(
+    List<Song> songs, {
+    QQAuthState? auth,
+    MatchProgressCallback? onProgress,
   }) async {
     final results = <MatchResult>[];
     var consecutiveFailures = 0;
     var emptyStreak = 0;
 
-    for (var i = 0; i < playlist.songs.length; i++) {
-      final song = playlist.songs[i];
+    for (var i = 0; i < songs.length; i++) {
+      final song = songs[i];
       onProgress?.call(i, null); // 该首开始匹配
       if (results.isNotEmpty) {
         await Future.delayed(_throttle);
@@ -100,8 +108,7 @@ class MatchService {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final candidates =
-            await _client.search(keyword, limit: 5, auth: auth);
+        final candidates = await _client.search(keyword, limit: 5, auth: auth);
         return MatchResult(
           original: song,
           matched: _pickBest(song, candidates),
@@ -109,9 +116,9 @@ class MatchService {
       } catch (e) {
         lastError = e;
         if (attempt < 2) {
-          await Future.delayed(Duration(
-            milliseconds: attempt == 0 ? 1000 : 2500,
-          ));
+          await Future.delayed(
+            Duration(milliseconds: attempt == 0 ? 1000 : 2500),
+          );
         }
       }
     }
@@ -124,7 +131,8 @@ class MatchService {
     QQSong? best;
     var bestScore = 0.0;
     for (final c in candidates) {
-      final score = _similarity(song.name, c.name) * 0.7 +
+      final score =
+          _similarity(song.name, c.name) * 0.7 +
           _similarity(song.artist, c.artist) * 0.3;
       if (score > bestScore) {
         bestScore = score;

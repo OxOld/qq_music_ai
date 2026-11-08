@@ -90,7 +90,7 @@ class QQMusicClient {
   static const _headers = {
     'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://y.qq.com/',
     'Origin': 'https://y.qq.com',
   };
@@ -102,10 +102,10 @@ class QQMusicClient {
   };
 
   Map<String, String> _authedHeaders(QQAuthState auth) => {
-        ..._headers,
-        'Content-Type': 'application/json',
-        'Cookie': auth.cookie,
-      };
+    ..._headers,
+    'Content-Type': 'application/json',
+    'Cookie': auth.cookie,
+  };
 
   /// musicu.fcg 响应可能因中文参数返回 GBK，先 UTF-8 再 latin1 兜底
   String _decode(List<int> bytes) {
@@ -119,8 +119,11 @@ class QQMusicClient {
   // ---------- 搜索 ----------
 
   /// 搜索歌曲。传入登录态时走账号维度（移动网络下更不容易被限流）
-  Future<List<QQSong>> search(String keyword,
-      {int limit = 20, QQAuthState? auth}) async {
+  Future<List<QQSong>> search(
+    String keyword, {
+    int limit = 20,
+    QQAuthState? auth,
+  }) async {
     final url = Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg');
     final loggedIn = auth != null && auth.isLoggedIn;
     final body = {
@@ -161,10 +164,7 @@ class QQMusicClient {
     }
 
     final data = jsonDecode(utf8.decode(resp.bodyBytes));
-    final list = _digList(
-      data,
-      ['req_1', 'data', 'body', 'song', 'list'],
-    );
+    final list = _digList(data, ['req_1', 'data', 'body', 'song', 'list']);
 
     return list
         .whereType<Map>()
@@ -202,14 +202,16 @@ class QQMusicClient {
           final tid = item['tid']?.toString() ?? '';
           final dirid = item['dirid']?.toString() ?? '';
           if (tid == '0' && dirid.isEmpty) continue;
-          result.add(MyPlaylist(
-            id: tid.isNotEmpty && tid != '0' ? tid : dirid,
-            dirId: int.tryParse(dirid) ?? 0,
-            name: item['diss_name']?.toString() ?? '未命名歌单',
-            count: (item['song_cnt'] as num?)?.toInt() ?? 0,
-            coverUrl: _https(item['diss_cover']?.toString()),
-            isCreated: true,
-          ));
+          result.add(
+            MyPlaylist(
+              id: tid.isNotEmpty && tid != '0' ? tid : dirid,
+              dirId: int.tryParse(dirid) ?? 0,
+              name: item['diss_name']?.toString() ?? '未命名歌单',
+              count: (item['song_cnt'] as num?)?.toInt() ?? 0,
+              coverUrl: _https(item['diss_cover']?.toString()),
+              isCreated: true,
+            ),
+          );
         }
       }
     } catch (_) {
@@ -236,14 +238,16 @@ class QQMusicClient {
         for (final item in list.whereType<Map>()) {
           final id = item['dissid']?.toString() ?? '';
           if (id.isEmpty) continue;
-          result.add(MyPlaylist(
-            id: id,
-            dirId: int.tryParse(item['dirid']?.toString() ?? '') ?? 0,
-            name: item['dissname']?.toString() ?? '未命名歌单',
-            count: (item['songnum'] as num?)?.toInt() ?? 0,
-            coverUrl: _https(item['logo']?.toString()),
-            isCreated: false,
-          ));
+          result.add(
+            MyPlaylist(
+              id: id,
+              dirId: int.tryParse(item['dirid']?.toString() ?? '') ?? 0,
+              name: item['dissname']?.toString() ?? '未命名歌单',
+              count: (item['songnum'] as num?)?.toInt() ?? 0,
+              coverUrl: _https(item['logo']?.toString()),
+              isCreated: false,
+            ),
+          );
         }
       }
     } catch (_) {}
@@ -267,7 +271,9 @@ class QQMusicClient {
 
   /// 歌单内的歌曲。[playlistId] 为对外歌单 ID（tid / dissid）。
   Future<List<QQSong>> getPlaylistSongs(
-      QQAuthState auth, String playlistId) async {
+    QQAuthState auth,
+    String playlistId,
+  ) async {
     final isLiked = playlistId == '201';
     final param = isLiked
         ? {
@@ -325,7 +331,9 @@ class QQMusicClient {
   /// 创建歌单，返回内部 dirId（加歌用）。
   /// 对外展示用 tid，通过返回的 MyPlaylist.id 提供。
   Future<CreatePlaylistResult> createPlaylist(
-      QQAuthState auth, String name) async {
+    QQAuthState auth,
+    String name,
+  ) async {
     final resp = await _client
         .post(
           Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg'),
@@ -364,7 +372,8 @@ class QQMusicClient {
     if (retCode != 0) {
       throw QQMusicException('创建歌单被拒绝 (retCode=$retCode)');
     }
-    final dirId = int.tryParse('${d?['result']?['dirId'] ?? d?['dirId'] ?? ''}') ?? 0;
+    final dirId =
+        int.tryParse('${d?['result']?['dirId'] ?? d?['dirId'] ?? ''}') ?? 0;
     final tid = int.tryParse('${d?['result']?['tid'] ?? d?['tid'] ?? ''}') ?? 0;
     if (dirId == 0 && tid == 0) {
       throw QQMusicException('创建歌单失败：响应中无歌单 ID');
@@ -402,8 +411,7 @@ class QQMusicClient {
                   'tid': dirId,
                   'bFmtUtf8': true,
                   'v_songInfo': [
-                    for (final s in batch)
-                      {'songId': s.songId, 'songType': 0},
+                    for (final s in batch) {'songId': s.songId, 'songType': 0},
                   ],
                 },
               },
@@ -420,6 +428,58 @@ class QQMusicClient {
       final retCode = req['data']?['retCode'];
       if (retCode != 0) {
         throw QQMusicException('添加歌曲被拒绝 (retCode=$retCode)');
+      }
+    }
+    return true;
+  }
+
+  /// 批量从我创建的歌单移除歌曲（DelSonglist，与 AddSonglist 同模块对称）
+  Future<bool> removeSongsFromPlaylist(
+    QQAuthState auth,
+    int dirId,
+    List<QQSong> songs,
+  ) async {
+    for (var i = 0; i < songs.length; i += 50) {
+      final batch = songs.sublist(
+        i,
+        i + 50 > songs.length ? songs.length : i + 50,
+      );
+      final resp = await _client
+          .post(
+            Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg'),
+            headers: _authedHeaders(auth),
+            body: jsonEncode({
+              'comm': {
+                'ct': 24,
+                'cv': 4747474,
+                'uin': auth.uin,
+                'authst': auth.musickey,
+              },
+              'req_1': {
+                'module': 'music.musicasset.PlaylistDetailWrite',
+                'method': 'DelSonglist',
+                'param': {
+                  'dirId': dirId,
+                  'tid': dirId,
+                  'bFmtUtf8': true,
+                  'v_songInfo': [
+                    for (final s in batch) {'songId': s.songId, 'songType': 0},
+                  ],
+                },
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final body = _decode(resp.bodyBytes);
+      final data = jsonDecode(body);
+      final req = data['req_1'];
+      if (req is! Map || req['code'] != 0) {
+        throw QQMusicException('移除歌曲失败 code=${req?['code']}');
+      }
+      final retCode = req['data']?['retCode'];
+      if (retCode != 0) {
+        throw QQMusicException('移除歌曲被拒绝 (retCode=$retCode)');
       }
     }
     return true;
@@ -455,7 +515,8 @@ class QQMusicClient {
     }
     if (req['data']?['retCode'] != 0) {
       throw QQMusicException(
-          '删除被拒绝 (retCode=${req['data']?['retCode']}，系统歌单不可删除)');
+        '删除被拒绝 (retCode=${req['data']?['retCode']}，系统歌单不可删除)',
+      );
     }
   }
 
@@ -498,7 +559,9 @@ class QQMusicClient {
         final decoded = jsonDecode(raw);
         if (decoded is Map) {
           decoded.forEach((k, v) {
-            if (v is Map) _urlCache[k.toString()] = Map<String, dynamic>.from(v);
+            if (v is Map) {
+              _urlCache[k.toString()] = Map<String, dynamic>.from(v);
+            }
           });
         }
       }
@@ -528,9 +591,11 @@ class QQMusicClient {
       final prefs = await SharedPreferences.getInstance();
       // 顺手清掉过期项，避免无限增长
       final now = DateTime.now().millisecondsSinceEpoch;
-      _urlCache.removeWhere((_, v) =>
-          now - ((v['ts'] as num?)?.toInt() ?? 0) >
-          _urlCacheTtl.inMilliseconds);
+      _urlCache.removeWhere(
+        (_, v) =>
+            now - ((v['ts'] as num?)?.toInt() ?? 0) >
+            _urlCacheTtl.inMilliseconds,
+      );
       await prefs.setString(_urlCacheKey, jsonEncode(_urlCache));
     } catch (_) {}
   }
@@ -544,12 +609,7 @@ class QQMusicClient {
 
     final url = Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg');
     final body = {
-      'comm': {
-        'ct': 19,
-        'cv': 0,
-        'uin': auth.uin,
-        'authst': auth.musickey,
-      },
+      'comm': {'ct': 19, 'cv': 0, 'uin': auth.uin, 'authst': auth.musickey},
       'req_1': {
         'module': 'vkey.GetVkeyServer',
         'method': 'CgiGetVkey',
@@ -565,11 +625,7 @@ class QQMusicClient {
     };
 
     final resp = await _client
-        .post(
-          url,
-          headers: _authedHeaders(auth),
-          body: jsonEncode(body),
-        )
+        .post(url, headers: _authedHeaders(auth), body: jsonEncode(body))
         .timeout(const Duration(seconds: 20));
 
     if (resp.statusCode != 200) {
@@ -586,8 +642,8 @@ class QQMusicClient {
     }
     final prefix = (midurlinfo.first as Map)['sip'] is List
         ? ((midurlinfo.first['sip'] as List).isNotEmpty
-            ? (midurlinfo.first['sip'] as List).first.toString()
-            : 'http://ws.stream.qqmusic.qq.com/')
+              ? (midurlinfo.first['sip'] as List).first.toString()
+              : 'http://ws.stream.qqmusic.qq.com/')
         : 'http://ws.stream.qqmusic.qq.com/';
     // sip 为 http，实测 https 同样可用（HEAD 200），统一升级
     final full = '$prefix$purl'.replaceFirst('http://', 'https://');
@@ -600,7 +656,9 @@ class QQMusicClient {
   String? _https(String? url) {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('//')) return 'https:$url';
-    if (url.startsWith('http://')) return url.replaceFirst('http://', 'https://');
+    if (url.startsWith('http://')) {
+      return url.replaceFirst('http://', 'https://');
+    }
     return url;
   }
 
