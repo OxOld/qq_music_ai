@@ -205,7 +205,14 @@ class _JustAudioPlayer extends AudioPlayerPlatform {
 
   @override
   Future<PlayResponse> play(PlayRequest request) async {
-    await _audioHandler.play();
+    // 区分来源：这里来自 App 自己的 just_audio 调用（UI/切歌/自动连播），
+    // 不应被「暂停后忽略恢复」的保护误伤。
+    _playerAudioHandler._appInitiatedPlay = true;
+    try {
+      await _audioHandler.play();
+    } finally {
+      _playerAudioHandler._appInitiatedPlay = false;
+    }
     return PlayResponse();
   }
 
@@ -635,8 +642,55 @@ class _PlayerAudioHandler extends BaseAudioHandler
     }
   }
 
+  /// 车机（CarWith / 蓝牙方控）会把同一次按键上抛两次：按下和抬起各一条，
+  /// 播放/暂停键按两次就变成「暂停后立刻恢复」。对短时间内的重复点击做去重。
+  DateTime _lastMediaClickAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime? _lastPauseAt;
+
+  /// 由 App 自身的 just_audio 调用触发（区别于车机/通知栏的系统指令）
+  bool _appInitiatedPlay = false;
+
+  @override
+  Future<void> click([MediaButton button = MediaButton.media]) async {
+    final now = DateTime.now();
+    final window = button == MediaButton.media
+        ? const Duration(milliseconds: 500)
+        : const Duration(milliseconds: 250);
+    if (now.difference(_lastMediaClickAt) < window) return;
+    switch (button) {
+      case MediaButton.media:
+        // 车机发完 pause 后可能再补一条「切换」键，此时 _playing 已是 false，
+        // 直接播放会把用户的暂停顶掉。暂停后极短时间内的恢复请求一律忽略。
+        if (_playing) {
+          _lastMediaClickAt = now;
+          await pause();
+        } else if (!_pausedRecently(now)) {
+          _lastMediaClickAt = now;
+          await play();
+        }
+        break;
+      case MediaButton.next:
+        _lastMediaClickAt = now;
+        await skipToNext();
+        break;
+      case MediaButton.previous:
+        _lastMediaClickAt = now;
+        await skipToPrevious();
+        break;
+    }
+  }
+
+  bool _pausedRecently(DateTime now) {
+    final lastPause = _lastPauseAt;
+    return lastPause != null &&
+        now.difference(lastPause) < const Duration(milliseconds: 800);
+  }
+
   @override
   Future<void> play() async {
+    // 同上：车机在 pause 之后自动补发的 play 不应顶掉暂停；
+    // App 自己发起的播放（UI/切歌/自动连播）不受影响。
+    if (!_appInitiatedPlay && _pausedRecently(DateTime.now())) return;
     if (_justAudioEvent.processingState == ProcessingStateMessage.completed) {
       await skipToQueueItem(0);
     }
@@ -650,6 +704,7 @@ class _PlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> pause() async {
+    _lastPauseAt = DateTime.now();
     _updatePosition();
     customEvent.add(_PlayingEvent(_playing = false));
     _broadcastState();
