@@ -15,6 +15,17 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+// 车机伪装包：把 applicationId 换成 CarWith 白名单里、本机未安装的应用包名
+// （如汽水音乐 com.luna.music），用于车机完整界面投屏测试。
+// 用法：在 ~/.gradle/gradle.properties 写入 spoofPackage=com.luna.music 后
+// flutter build apk --release（构建完删掉该行）；平时不设置即为正式包名。
+val spoofPackage = (project.findProperty("spoofPackage") as String?)?.trim().orEmpty()
+val appLabel = when (spoofPackage) {
+    "" -> "QQ音乐AI歌单"
+    "com.luna.music" -> "汽水音乐"
+    else -> spoofPackage
+}
+
 android {
     namespace = "com.qqmusicai.qq_music_ai"
     compileSdk = flutter.compileSdkVersion
@@ -31,7 +42,12 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.qqmusicai.qq_music_ai"
+        applicationId = spoofPackage.ifEmpty { "com.qqmusicai.qq_music_ai" }
+        // 伪装包使用对应应用的显示名（车机/桌面按 label 展示）
+        manifestPlaceholders["appLabel"] = appLabel
+        // 汽水音乐伪装包额外暴露一个与其主界面同名的 activity-alias
+        manifestPlaceholders["sodaAliasEnabled"] =
+            (spoofPackage == "com.luna.music").toString()
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

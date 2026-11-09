@@ -58,3 +58,6 @@ icon_master_1024.png
 android/key.properties
 android/app/upload-keystore.jks
 *.jks
+
+# 本地打包产物（伪装包等）
+/dist/

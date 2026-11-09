@@ -10,7 +10,7 @@
     <!-- 应用内自更新：下载 APK 后拉起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
-        android:label="QQ音乐AI歌单"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config">
@@ -36,6 +36,15 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- 车机伪装包：模拟汽水音乐（com.luna.music）的主界面组件名。
+             仅当 spoofPackage=com.luna.music 时启用；普通包默认关闭。
+             部分车机按固定 ComponentName 拉起应用，别名保证其能找到入口。 -->
+        <activity-alias
+            android:name="com.luna.biz.main.main.MainActivity"
+            android:targetActivity=".MainActivity"
+            android:label="汽水音乐"
+            android:exported="true"
+            android:enabled="${sodaAliasEnabled}"/>
         <!-- 应用内自更新：授权系统安装器读取下载的 APK（cache 目录） -->
         <provider
             android:name="androidx.core.content.FileProvider"
