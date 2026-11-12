@@ -11,6 +11,8 @@ import '../theme/app_theme.dart';
 
 /// 全屏播放页：大封面（旋转）+ 可拖动进度 + 控制按钮 + 播放列表。
 /// 竖屏为垂直布局，横屏自动切换为「封面左 / 控制右」布局。
+/// 封面 / 按钮 / 字号按屏幕最短边等比缩放（[_scale]），
+/// 车机投屏、平板等大屏不会显得控件过小；手机保持 1.0 不变。
 class PlayerPage extends ConsumerStatefulWidget {
   const PlayerPage({super.key});
 
@@ -158,11 +160,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     return '$m:$s';
   }
 
+  /// 尺寸缩放系数：车机投屏 / 平板等大屏（最短边 > 420dp）时封面、
+  /// 按钮、字号等比放大；手机（最短边约 360–430dp）保持 1.0，观感不变。
+  double _scale(Size size) => (size.shortestSide / 420).clamp(1.0, 2.2);
+
   @override
   Widget build(BuildContext context) {
     final service = ref.read(playerServiceProvider);
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
+    final scale = _scale(size);
 
     // 状态栏白色图标（顶部为品牌渐变）
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -178,8 +185,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           ),
           child: SafeArea(
             child: isLandscape
-                ? _buildLandscape(service, size)
-                : _buildPortrait(service),
+                ? _buildLandscape(service, size, scale)
+                : _buildPortrait(service, scale),
           ),
         ),
       ),
@@ -188,44 +195,47 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   // ---------- 竖屏布局 ----------
 
-  Widget _buildPortrait(PlayerService service) {
+  Widget _buildPortrait(PlayerService service, double scale) {
     return Column(
       children: [
-        _buildTopBar(service),
+        _buildTopBar(service, scale),
         Expanded(
           flex: 5,
           child: Center(
-            child: _buildCover(MediaQuery.of(context).size.shortestSide - 80),
+            child: _buildCover(
+              MediaQuery.of(context).size.shortestSide - 80 * scale,
+              scale,
+            ),
           ),
         ),
-        _buildTitleSection(),
-        const SizedBox(height: 14),
-        _buildProgress(service),
+        _buildTitleSection(scale: scale),
+        SizedBox(height: 14 * scale),
+        _buildProgress(service, scale),
         // 底部多留一档呼吸空间（SafeArea 已吃掉系统手势条）
-        _buildControls(service, bottomPad: 26),
+        _buildControls(service, scale, bottomPad: 26 * scale),
       ],
     );
   }
 
   // ---------- 横屏布局 ----------
 
-  Widget _buildLandscape(PlayerService service, Size size) {
-    final coverSize = (size.height - 90).clamp(150.0, 300.0);
+  Widget _buildLandscape(PlayerService service, Size size, double scale) {
+    final coverSize = (size.height - 90 * scale).clamp(150.0, 300.0 * scale);
     return Row(
       children: [
-        Expanded(flex: 5, child: Center(child: _buildCover(coverSize))),
+        Expanded(flex: 5, child: Center(child: _buildCover(coverSize, scale))),
         Expanded(
           flex: 6,
           child: Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: EdgeInsets.only(right: 12 * scale),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildTopBar(service),
-                _buildTitleSection(compact: true),
-                const SizedBox(height: 4),
-                _buildProgress(service),
-                _buildControls(service),
+                _buildTopBar(service, scale),
+                _buildTitleSection(compact: true, scale: scale),
+                SizedBox(height: 4 * scale),
+                _buildProgress(service, scale),
+                _buildControls(service, scale, bottomPad: 10 * scale),
               ],
             ),
           ),
@@ -236,17 +246,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   // ---------- 通用部件 ----------
 
-  Widget _buildTopBar(PlayerService service) {
+  Widget _buildTopBar(PlayerService service, double scale) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+      padding: EdgeInsets.fromLTRB(6 * scale, 4 * scale, 6 * scale, 0),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(
+            icon: Icon(
               Icons.keyboard_arrow_down_rounded,
               color: Colors.white,
-              size: 30,
+              size: 30 * scale,
             ),
           ),
           const Spacer(),
@@ -254,16 +264,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             '正在播放 (${_index + 1}/$_queueLen)',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.75),
-              fontSize: 12.5,
+              fontSize: 12.5 * scale,
             ),
           ),
           const Spacer(),
           IconButton(
             onPressed: () => _showQueueSheet(service),
-            icon: const Icon(
+            icon: Icon(
               Icons.queue_music_rounded,
               color: Colors.white,
-              size: 24,
+              size: 24 * scale,
             ),
           ),
         ],
@@ -271,8 +281,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _buildCover(double size) {
-    final s = size.clamp(150.0, 300.0);
+  Widget _buildCover(double size, double scale) {
+    final s = size.clamp(150.0, 300.0 * scale);
     return RotationTransition(
       turns: _rotateCtrl,
       child: Container(
@@ -283,8 +293,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 40,
-              offset: const Offset(0, 16),
+              blurRadius: 40 * scale,
+              offset: Offset(0, 16 * scale),
             ),
           ],
         ),
@@ -314,13 +324,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                   color: const Color(0xFF0C211A),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.25),
-                    width: 2,
+                    width: 2 * scale,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.music_note_rounded,
                   color: Colors.white54,
-                  size: 22,
+                  size: 22 * scale,
                 ),
               ),
             ),
@@ -330,9 +340,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _buildTitleSection({bool compact = false}) {
+  Widget _buildTitleSection({bool compact = false, double scale = 1}) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 32),
+      padding: EdgeInsets.symmetric(horizontal: (compact ? 8 : 32) * scale),
       child: Column(
         children: [
           Text(
@@ -342,16 +352,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white,
-              fontSize: compact ? 16 : 19,
+              fontSize: (compact ? 16 : 19) * scale,
               fontWeight: FontWeight.w800,
             ),
           ),
-          SizedBox(height: compact ? 3 : 6),
+          SizedBox(height: (compact ? 3 : 6) * scale),
           Text(
             'QQ 音乐',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.6),
-              fontSize: compact ? 11 : 12.5,
+              fontSize: (compact ? 11 : 12.5) * scale,
             ),
           ),
         ],
@@ -359,16 +369,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _buildProgress(PlayerService service) {
+  Widget _buildProgress(PlayerService service, double scale) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 26),
+      padding: EdgeInsets.symmetric(horizontal: 26 * scale),
       child: Column(
         children: [
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              trackHeight: 3.5,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              trackHeight: 3.5 * scale,
+              thumbShape: RoundSliderThumbShape(enabledThumbRadius: 7 * scale),
+              overlayShape: RoundSliderOverlayShape(overlayRadius: 14 * scale),
               activeTrackColor: AppColors.brand,
               inactiveTrackColor: Colors.white24,
               thumbColor: Colors.white,
@@ -399,7 +409,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               },
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6 * scale),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -414,7 +424,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 ),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.65),
-                  fontSize: 11,
+                  fontSize: 11 * scale,
                   height: 1.2,
                 ),
               ),
@@ -422,7 +432,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 _fmt(_duration),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.65),
-                  fontSize: 11,
+                  fontSize: 11 * scale,
                   height: 1.2,
                 ),
               ),
@@ -433,18 +443,27 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _buildControls(PlayerService service, {double bottomPad = 10}) {
+  Widget _buildControls(
+    PlayerService service,
+    double scale, {
+    double bottomPad = 10,
+  }) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(26, 6, 26, bottomPad),
+      padding: EdgeInsets.fromLTRB(
+        26 * scale,
+        6 * scale,
+        26 * scale,
+        bottomPad,
+      ),
       child: SizedBox(
-        height: 68,
+        height: 68 * scale,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // 播放模式（提示悬浮在按钮上方，不影响整行对齐）
             SizedBox(
-              width: 48,
+              width: 48 * scale,
               child: Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
@@ -474,22 +493,23 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     icon: _modeIcon(
                       service.mode,
                       Colors.white.withValues(alpha: 0.75),
+                      scale,
                     ),
                   ),
                   if (_modeHint != null)
                     Positioned(
-                      top: -20,
-                      left: -20,
-                      right: -20,
+                      top: -20 * scale,
+                      left: -20 * scale,
+                      right: -20 * scale,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 200),
                         child: Text(
                           _modeHint!,
                           key: ValueKey(_modeHint),
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
-                            fontSize: 11,
+                            fontSize: 11 * scale,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -500,10 +520,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             ),
             IconButton(
               onPressed: () => service.previous(),
-              icon: const Icon(
+              icon: Icon(
                 Icons.skip_previous_rounded,
                 color: Colors.white,
-                size: 38,
+                size: 38 * scale,
               ),
             ),
             // 播放 / 暂停（大按钮）
@@ -517,11 +537,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                   if (mounted) setState(() {});
                 },
                 child: SizedBox(
-                  width: 68,
-                  height: 68,
+                  width: 68 * scale,
+                  height: 68 * scale,
                   child: Icon(
                     _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 42,
+                    size: 42 * scale,
                     color: AppColors.brandDeep,
                   ),
                 ),
@@ -529,10 +549,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             ),
             IconButton(
               onPressed: () => service.next(),
-              icon: const Icon(
+              icon: Icon(
                 Icons.skip_next_rounded,
                 color: Colors.white,
-                size: 38,
+                size: 38 * scale,
               ),
             ),
             // 播放列表
@@ -541,7 +561,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               icon: Icon(
                 Icons.format_list_bulleted_rounded,
                 color: Colors.white.withValues(alpha: 0.75),
-                size: 26,
+                size: 26 * scale,
               ),
             ),
           ],
@@ -550,16 +570,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Widget _modeIcon(PlayMode mode, Color color) {
+  Widget _modeIcon(PlayMode mode, Color color, double scale) {
     switch (mode) {
       case PlayMode.listLoop:
-        return Icon(Icons.repeat_rounded, color: color, size: 24);
+        return Icon(Icons.repeat_rounded, color: color, size: 24 * scale);
       case PlayMode.singleLoop:
-        return Icon(Icons.repeat_one_rounded, color: color, size: 24);
+        return Icon(Icons.repeat_one_rounded, color: color, size: 24 * scale);
       case PlayMode.sequential:
-        return Icon(Icons.low_priority_rounded, color: color, size: 24);
+        return Icon(Icons.low_priority_rounded, color: color, size: 24 * scale);
       case PlayMode.shuffle:
-        return Icon(Icons.shuffle_rounded, color: color, size: 22);
+        return Icon(Icons.shuffle_rounded, color: color, size: 22 * scale);
     }
   }
 

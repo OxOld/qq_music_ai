@@ -324,74 +324,85 @@ class _HomePageState extends ConsumerState<HomePage> {
     final matchedDone = !_matching && matchResults != null;
     final List<MatchResult?>? rowStates = matchResults ?? _matchProgress;
 
+    // 横屏（车机投屏 / 平板）：内容限宽居中，避免投屏窄窗口下控件被拉得过宽
+    final landscape =
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+    final pad = landscape ? 24.0 : 16.0;
+
     // 顶部固定 + 下方滚动
     return Column(
       children: [
         _Header(),
         Expanded(
-          child: ListView(
-            controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            children: [
-              if (!configured && !_loading) _ConfigBanner(onTap: _goToSettings),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: ListView(
+                controller: _scrollController,
+                padding: EdgeInsets.fromLTRB(pad, 0, pad, 24),
+                children: [
+                  if (!configured && !_loading)
+                    _ConfigBanner(onTap: _goToSettings),
 
-              // ---------- 输入卡片 ----------
-              _PromptCard(
-                controller: _controller,
-                loading: _loading,
-                onGenerate: _generate,
-                examples: _examples,
-              ),
+                  // ---------- 输入卡片 ----------
+                  _PromptCard(
+                    controller: _controller,
+                    loading: _loading,
+                    onGenerate: _generate,
+                    examples: _examples,
+                  ),
 
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                _ErrorBox(message: _error!),
-              ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    _ErrorBox(message: _error!),
+                  ],
 
-              // ---------- AI 生成中 ----------
-              if (_loading) _LoadingCard(),
+                  // ---------- AI 生成中 ----------
+                  if (_loading) _LoadingCard(),
 
-              // ---------- 歌单（匹配在列表上就地完成） ----------
-              if (_playlist != null) ...[
-                const SizedBox(height: 16),
-                _PlaylistSection(
-                  playlist: _playlist!,
-                  onMatch: _matching ? null : _match,
-                  matching: _matching,
-                  matchedDone: matchedDone,
-                  rowStates: rowStates,
-                  loadingPlayMid: _loadingPlayMid,
-                  playAllLoading: _playAllLoading,
-                  onPlay: _playMatch,
-                  onPlayAll: _playAll,
-                ),
-              ],
-
-              // ---------- 匹配完成后：入库操作 ----------
-              if (matchedDone) ...[
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _GradientButton(
-                        label: _creating ? '创建中…' : '创建新歌单',
-                        icon: Icons.add_chart_rounded,
-                        loading: _creating,
-                        onPressed: _creating ? null : _create,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SecondaryActionButton(
-                        label: '加入已有歌单',
-                        icon: Icons.playlist_add_rounded,
-                        onPressed: _creating ? null : _showAddToExisting,
-                      ),
+                  // ---------- 歌单（匹配在列表上就地完成） ----------
+                  if (_playlist != null) ...[
+                    const SizedBox(height: 16),
+                    _PlaylistSection(
+                      playlist: _playlist!,
+                      onMatch: _matching ? null : _match,
+                      matching: _matching,
+                      matchedDone: matchedDone,
+                      rowStates: rowStates,
+                      loadingPlayMid: _loadingPlayMid,
+                      playAllLoading: _playAllLoading,
+                      onPlay: _playMatch,
+                      onPlayAll: _playAll,
                     ),
                   ],
-                ),
-              ],
-            ],
+
+                  // ---------- 匹配完成后：入库操作 ----------
+                  if (matchedDone) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _GradientButton(
+                            label: _creating ? '创建中…' : '创建新歌单',
+                            icon: Icons.add_chart_rounded,
+                            loading: _creating,
+                            onPressed: _creating ? null : _create,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _SecondaryActionButton(
+                            label: '加入已有歌单',
+                            icon: Icons.playlist_add_rounded,
+                            onPressed: _creating ? null : _showAddToExisting,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -406,6 +417,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 横屏（车机投屏 / 平板）：压缩头部高度，标题与副标题同一行
+    final landscape =
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
     return Container(
       decoration: BoxDecoration(
         gradient: AppColors.brandGradient,
@@ -414,38 +428,74 @@ class _Header extends StatelessWidget {
           bottomRight: Radius.circular(28),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      padding: EdgeInsets.fromLTRB(24, 0, 24, landscape ? 14 : 24),
       child: SafeArea(
         bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 14),
-            const Row(
-              children: [
-                Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 26),
-                SizedBox(width: 10),
-                Text(
-                  'QQ 音乐 AI 歌单',
-                  style: TextStyle(
+        child: landscape
+            ? Row(
+                children: [
+                  const Icon(
+                    Icons.graphic_eq_rounded,
                     color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
+                    size: 24,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '一句话，生成你的专属歌单',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
-                fontSize: 13.5,
+                  const SizedBox(width: 10),
+                  const Text(
+                    'QQ 音乐 AI 歌单',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      '一句话，生成你的专属歌单',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.graphic_eq_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'QQ 音乐 AI 歌单',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '一句话，生成你的专属歌单',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

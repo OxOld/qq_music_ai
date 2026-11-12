@@ -6,7 +6,10 @@ import '../widgets/mini_player.dart';
 import 'home_page.dart';
 import 'mine_page.dart';
 
-/// 根页面：底部「首页 / 我的」双 Tab + 迷你播放条
+/// 根页面：「首页 / 我的」双 Tab + 迷你播放条
+///
+/// 竖屏：底部 NavigationBar；横屏（车机投屏 / 平板）：左侧 NavigationRail，
+/// 底部只保留迷你播放条，把纵向空间让给内容。
 ///
 /// 监听主题切换：AppColors 是静态取值，需要整棵树重跑 build 才会换色
 /// （tab 状态与各页 State 均保留，仅重建 widget）。
@@ -37,46 +40,105 @@ class _RootPageState extends State<RootPage> {
     super.dispose();
   }
 
+  void _select(int i) {
+    setState(() => _index = i);
+    // 切到「我的」时刷新歌单列表（首页添加/创建后能立刻看到）
+    if (i == 1) _mineKey.currentState?.refresh();
+  }
+
+  /// Tab 内容（横竖屏切换时 State 保留，仅布局重建）
+  Widget _pages() => IndexedStack(
+    index: _index,
+    children: [
+      // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
+      HomePage(),
+      MinePage(key: _mineKey),
+    ],
+  );
+
+  /// 竖屏底部导航栏
+  Widget _bottomBar() => NavigationBar(
+    selectedIndex: _index,
+    onDestinationSelected: _select,
+    destinations: const [
+      NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home_rounded),
+        label: '首页',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.person_outline_rounded),
+        selectedIcon: Icon(Icons.person_rounded),
+        label: '我的',
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
+    // 横屏（车机投屏 / 平板）：左侧导航栏 + 右侧内容
+    final wide =
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
     // 状态栏白色图标（顶部为品牌渐变）
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: kStatusOverlayLight,
       child: Scaffold(
-        body: IndexedStack(
-          index: _index,
-          children: [
-            // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
-            HomePage(),
-            MinePage(key: _mineKey),
-          ],
-        ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            MiniPlayer(),
-            NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) {
-                setState(() => _index = i);
-                // 切到「我的」时刷新歌单列表（首页添加/创建后能立刻看到）
-                if (i == 1) _mineKey.currentState?.refresh();
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: '首页',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.person_outline_rounded),
-                  selectedIcon: Icon(Icons.person_rounded),
-                  label: '我的',
-                ),
-              ],
-            ),
-          ],
-        ),
+        body: wide
+            ? Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _index,
+                    onDestinationSelected: _select,
+                    backgroundColor: Colors.white,
+                    indicatorColor: AppColors.brandSoft,
+                    minWidth: 78,
+                    labelType: NavigationRailLabelType.all,
+                    selectedIconTheme: IconThemeData(
+                      color: AppColors.brandDeep,
+                      size: 26,
+                    ),
+                    unselectedIconTheme: IconThemeData(
+                      color: AppColors.textSecondary,
+                      size: 26,
+                    ),
+                    selectedLabelTextStyle: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.brandDeep,
+                    ),
+                    unselectedLabelTextStyle: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home_rounded),
+                        label: Text('首页'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.person_outline_rounded),
+                        selectedIcon: Icon(Icons.person_rounded),
+                        label: Text('我的'),
+                      ),
+                    ],
+                  ),
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppColors.textPrimary.withValues(alpha: 0.08),
+                  ),
+                  Expanded(child: _pages()),
+                ],
+              )
+            : _pages(),
+        bottomNavigationBar: wide
+            ? MiniPlayer()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [MiniPlayer(), _bottomBar()],
+              ),
       ),
     );
   }
