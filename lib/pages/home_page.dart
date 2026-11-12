@@ -324,9 +324,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     final matchedDone = !_matching && matchResults != null;
     final List<MatchResult?>? rowStates = matchResults ?? _matchProgress;
 
-    // 横屏（车机投屏 / 平板）：内容限宽居中，避免投屏窄窗口下控件被拉得过宽
+    // 横屏（车机投屏 / 平板）：内容限宽居中，避免投屏窄窗口下控件被拉得过宽。
+    // 用 MediaQuery.orientation（窗口 surface 方向），理由同 root_page。
     final landscape =
-        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final pad = landscape ? 24.0 : 16.0;
 
     // 顶部固定 + 下方滚动
@@ -419,7 +420,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     // 横屏（车机投屏 / 平板）：压缩头部高度，标题与副标题同一行
     final landscape =
-        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+        MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
       decoration: BoxDecoration(
         gradient: AppColors.brandGradient,

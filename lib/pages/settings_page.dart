@@ -137,6 +137,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
+            // ---------- 投屏诊断（车机排查窗口方向/比例用） ----------
+            const _DisplayDiagCard(),
+            SizedBox(height: 12),
+
             // ---------- 主题色 ----------
             Container(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
@@ -647,6 +651,166 @@ class _CheckUpdateButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 投屏诊断卡片：展示当前窗口 / 显示器的关键参数（原生 + Flutter 两侧），
+/// 用于车机实车排查投屏窗口的方向与 dp 比例问题。
+///
+/// 关注点：
+/// - `displayId`：投屏虚拟屏通常不是 0（手机主屏为 0）；
+/// - `rotation` 与 `configOrientation`：窗口 surface 方向是否被系统改写；
+/// - `configWidthDp/HeightDp` 与 Flutter `size`：互联框架是否拉伸了 dp 比例；
+/// - `densityDpi`：车机低密度下控件物理尺寸的依据。
+class _DisplayDiagCard extends StatefulWidget {
+  const _DisplayDiagCard();
+
+  @override
+  State<_DisplayDiagCard> createState() => _DisplayDiagCardState();
+}
+
+class _DisplayDiagCardState extends State<_DisplayDiagCard> {
+  static const _channel = MethodChannel('qq_music_ai/display');
+  Map<String, dynamic>? _info;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final raw = await _channel.invokeMapMethod<String, Object?>(
+        'displayInfo',
+      );
+      if (!mounted) return;
+      setState(() {
+        _info = raw?.cast<String, dynamic>();
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _copy(BuildContext context) async {
+    final mq = MediaQuery.of(context);
+    final lines = <String>[
+      '--- 投屏诊断 ${DateTime.now()} ---',
+      'flutter.size=${mq.size.width}x${mq.size.height}',
+      'flutter.orientation=${mq.orientation.name}',
+      'flutter.dpr=${mq.devicePixelRatio}',
+      'flutter.textScale=${mq.textScaler.scale(14)}',
+      if (_info != null)
+        for (final e in _info!.entries) 'native.${e.key}=${e.value}',
+      if (_error != null) 'error=$_error',
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    if (context.mounted) AppToast.show(context, '诊断信息已复制', success: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final info = _info;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      decoration: AppColors.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cast_rounded, color: AppColors.brand, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                '投屏诊断',
+                style: TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _copy(context),
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('复制', style: TextStyle(fontSize: 12.5)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '车机投屏异常时把以下参数发给开发者（点复制）',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          if (_error != null)
+            Text(
+              '读取失败：$_error',
+              style: const TextStyle(fontSize: 12, color: AppColors.danger),
+            )
+          else if (info == null)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else ...[
+            _diagRow(
+              'Flutter 窗口',
+              '${mq.size.width.toStringAsFixed(0)}×${mq.size.height.toStringAsFixed(0)} dp · ${mq.orientation.name} · dpr ${mq.devicePixelRatio.toStringAsFixed(2)}',
+            ),
+            _diagRow(
+              '显示器',
+              'id=${info['displayId']} rotation=${info['rotation']} '
+                  '${info['widthPx']}×${info['heightPx']}px @${info['densityDpi']}dpi',
+            ),
+            _diagRow(
+              '系统配置',
+              'orientation=${info['configOrientation']} '
+                  '${info['configWidthDp']}×${info['configHeightDp']}dp '
+                  '@${info['configDensityDpi']}dpi',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _diagRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

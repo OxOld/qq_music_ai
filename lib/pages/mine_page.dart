@@ -280,7 +280,7 @@ class MinePageState extends ConsumerState<MinePage> {
 
     // 横屏（车机投屏 / 平板）：压缩头部高度，标题与账号信息同一行
     final landscape =
-        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: AppColors.bg,

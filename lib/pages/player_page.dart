@@ -168,7 +168,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Widget build(BuildContext context) {
     final service = ref.read(playerServiceProvider);
     final size = MediaQuery.of(context).size;
-    final isLandscape = size.width > size.height;
+    // 用 MediaQuery.orientation（窗口 surface 方向）：车机投屏窗口可能被
+    // 系统旋转 90° 呈现，宽高比与 surface 方向不一致（理由同 root_page）
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final scale = _scale(size);
 
     // 状态栏白色图标（顶部为品牌渐变）

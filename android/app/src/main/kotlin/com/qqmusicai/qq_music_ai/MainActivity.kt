@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.DisplayMetrics
+import android.view.Display
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -19,6 +21,9 @@ class MainActivity : AudioServiceActivity() {
 
     /// 后台连续播放：省电策略豁免（电池优化白名单）
     private val batteryChannel = "qq_music_ai/battery"
+
+    /// 投屏排查：窗口/显示器关键参数（车机实车定位方向与比例问题）
+    private val displayChannel = "qq_music_ai/display"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -38,7 +43,42 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, displayChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "displayInfo" -> result.success(displayInfo())
+                    else -> result.notImplemented()
+                }
+            }
     }
+
+    /// Activity 所在显示器 + 当前配置的关键参数，供 Flutter 侧诊断角标展示。
+    /// 车机投屏窗口的 displayId / rotation / 物理像素 / 密度与手机主屏不同，
+    /// 据此判断投屏窗口的方向与 dp 比例是否被互联框架改写。
+    private fun displayInfo(): Map<String, Any> {
+        val d = currentDisplay()
+        val m = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        d?.getRealMetrics(m)
+        val cfg = resources.configuration
+        return mapOf(
+            "displayId" to (d?.displayId ?: -1),
+            "rotation" to (d?.rotation ?: -1),
+            "widthPx" to m.widthPixels,
+            "heightPx" to m.heightPixels,
+            "densityDpi" to m.densityDpi,
+            "flags" to (d?.flags ?: -1),
+            "configOrientation" to cfg.orientation,
+            "configWidthDp" to cfg.screenWidthDp,
+            "configHeightDp" to cfg.screenHeightDp,
+            "configDensityDpi" to cfg.densityDpi,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun currentDisplay(): Display? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display
+        else windowManager.defaultDisplay
 
     private fun isIgnoringBatteryOptimizations(): Boolean =
         (getSystemService(POWER_SERVICE) as PowerManager)

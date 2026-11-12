@@ -76,9 +76,10 @@ class _RootPageState extends State<RootPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 横屏（车机投屏 / 平板）：左侧导航栏 + 右侧内容
-    final wide =
-        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
+    // 横屏（车机投屏 / 平板）：左侧导航栏 + 右侧内容。
+    // 用 MediaQuery.orientation（窗口 surface 方向）而非宽高比较：
+    // 车机投屏窗口可能被系统旋转 90° 呈现，宽高比与 surface 方向不一致。
+    final wide = MediaQuery.of(context).orientation == Orientation.landscape;
     // 状态栏白色图标（顶部为品牌渐变）
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: kStatusOverlayLight,
