@@ -499,7 +499,8 @@ class MinePageState extends ConsumerState<MinePage> {
                               playlist: created[i],
                               first: i == 0,
                               onMore:
-                                  created[i].dirId > 0 && created[i].id != '201'
+                                  created[i].dirId > 0 &&
+                                      created[i].dirId != 201
                                   ? () => _showPlaylistActions(created[i])
                                   : null,
                             ),

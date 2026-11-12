@@ -1251,10 +1251,10 @@ class _PlaylistPickerSheetState extends ConsumerState<_PlaylistPickerSheet> {
           .read(qqMusicClientProvider)
           .getMyPlaylists(widget.auth);
       if (!mounted) return;
-      // 只能往自己创建的歌单加歌；dirId 缺失的跳过
+      // 只能往自己创建的歌单加歌；dirId 缺失的跳过；「我喜欢」(201) 排除
       setState(
         () => _playlists = all
-            .where((p) => p.isCreated && p.dirId > 0 && p.id != '201')
+            .where((p) => p.isCreated && p.dirId > 0 && p.dirId != 201)
             .toList(),
       );
     } catch (e) {

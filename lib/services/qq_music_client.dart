@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -180,42 +181,134 @@ class QQMusicClient {
     final gtk = _getGTK(auth.musickey.isNotEmpty ? auth.musickey : auth.skey);
     final result = <MyPlaylist>[];
 
-    // 1) 创建的歌单
-    try {
-      final resp = await _client
-          .get(
-            Uri.parse(
-              'https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss'
-              '?hostUin=0&hostuin=${auth.uin}&sin=0&size=200&g_tk=$gtk'
-              '&loginUin=${auth.uin}&format=json&inCharset=utf8'
-              '&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0',
-            ),
-            headers: {..._profileHeaders, 'Cookie': auth.cookie},
-          )
-          .timeout(const Duration(seconds: 20));
-      final data = jsonDecode(utf8.decode(resp.bodyBytes));
-      final list = data['data']?['disslist'];
-      if (list is List) {
-        for (final item in list.whereType<Map>()) {
-          // dir_show == 0 为隐藏歌单（如 QZone 背景音乐）
-          if ((item['dir_show'] ?? 1) == 0) continue;
-          final tid = item['tid']?.toString() ?? '';
-          final dirid = item['dirid']?.toString() ?? '';
-          if (tid == '0' && dirid.isEmpty) continue;
-          result.add(
-            MyPlaylist(
-              id: tid.isNotEmpty && tid != '0' ? tid : dirid,
-              dirId: int.tryParse(dirid) ?? 0,
-              name: item['diss_name']?.toString() ?? '未命名歌单',
-              count: (item['song_cnt'] as num?)?.toInt() ?? 0,
-              coverUrl: _https(item['diss_cover']?.toString()),
-              isCreated: true,
-            ),
+    // 1) 创建的歌单：优先客户端现行接口 musicu PlaylistBaseRead.*
+    //    （旧接口 fcg_user_created_diss 已废弃，返回业务码 4000，导致自建列表丢失；
+    //    收藏列表走的另一个接口不受影响，故表现为「自建丢、收藏不丢」）。
+    //    module/method 与 comm 参数在不同客户端版本有差异（Mac/Win 实测不同名），
+    //    按序尝试、首个成功即用，全部失败再回退旧接口兜底。
+    var createdOk = false;
+    debugPrint(
+      '[diag] auth musickey.len=${auth.musickey.length} '
+      'skey.len=${auth.skey.length} cookie.len=${auth.cookie.length}',
+    );
+    // comm 鉴权对齐 QQ 音乐客户端实测参数（ct=19/cv=1859/tmeLoginType=3，uin 为字符串）；
+    // 参考实现 musicu 请求不带 Cookie（鉴权走 comm.authst），这里同样不带。
+    // 第二变体（ct=24，与项目现有写接口一致）作兜底。
+    final commVariants = <Map<String, dynamic>>[
+      {
+        'ct': '19',
+        'cv': '1859',
+        'uin': auth.uin,
+        'authst': auth.musickey,
+        'tmeLoginType': '3',
+      },
+      {'ct': 24, 'cv': 4747474, 'uin': auth.uin, 'authst': auth.musickey},
+    ];
+    // 实测（2026-11，网页登录态 qm_keyst）：GetPlaylistByUin + ct=19 组合可用；
+    // GetPlaylistInfoDiff 同参数返回 1000。顺序按实测可用优先，首个成功即用。
+    const methodVariants = ['GetPlaylistByUin', 'GetPlaylistInfoDiff'];
+    final musicuHeaders = {..._headers, 'Content-Type': 'application/json'};
+    for (final method in methodVariants) {
+      if (createdOk) break;
+      for (final comm in commVariants) {
+        if (createdOk) break;
+        try {
+          final resp = await _client
+              .post(
+                Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg'),
+                headers: musicuHeaders,
+                body: jsonEncode({
+                  'comm': comm,
+                  'req_1': {
+                    'module': 'music.musicasset.PlaylistBaseRead',
+                    'method': method,
+                    'param': {'uin': auth.uin, 'v_cache': <dynamic>[]},
+                  },
+                }),
+              )
+              .timeout(const Duration(seconds: 20));
+          final data = jsonDecode(_decode(resp.bodyBytes));
+          final req = data['req_1'];
+          final list = req?['data']?['v_playlist'];
+          debugPrint(
+            '[diag] created $method ct=${comm['ct']} code=${req?['code']} '
+            'items=${list is List ? list.length : null}',
           );
+          if (req is Map && req['code'] == 0 && list is List) {
+            for (final item in list.whereType<Map>()) {
+              final tid = '${item['tid'] ?? ''}';
+              if (tid.isEmpty || tid == '0') continue;
+              // dirShow 存在且为 0 视为隐藏歌单（如 QZone 背景音乐），与旧接口口径一致
+              final ds = item['dirShow'];
+              if (ds is num && ds.toInt() == 0) continue;
+              result.add(
+                MyPlaylist(
+                  id: tid,
+                  dirId: item['dirId'] is num
+                      ? (item['dirId'] as num).toInt()
+                      : int.tryParse('${item['dirId'] ?? ''}') ?? 0,
+                  name: item['dirName']?.toString() ?? '未命名歌单',
+                  count: (item['songNum'] as num?)?.toInt() ?? 0,
+                  // 封面字段实测为 picUrl / bigpicUrl（2026-11 GetPlaylistByUin）
+                  coverUrl: _https(
+                    (item['picUrl'] ?? item['bigpicUrl'])?.toString(),
+                  ),
+                  isCreated: true,
+                ),
+              );
+            }
+            createdOk = true;
+          }
+        } catch (e) {
+          debugPrint('[diag] created $method ct=${comm['ct']} exception: $e');
         }
       }
-    } catch (_) {
-      // 创建列表失败不影响收藏列表
+    }
+
+    // 1b) 兜底：旧接口（可能已废弃，保留以防新接口变动）
+    if (!createdOk) {
+      try {
+        final resp = await _client
+            .get(
+              Uri.parse(
+                'https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss'
+                '?hostUin=0&hostuin=${auth.uin}&sin=0&size=200&g_tk=$gtk'
+                '&loginUin=${auth.uin}&format=json&inCharset=utf8'
+                '&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0',
+              ),
+              headers: {..._profileHeaders, 'Cookie': auth.cookie},
+            )
+            .timeout(const Duration(seconds: 20));
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
+        debugPrint(
+          '[diag] created_diss fallback http=${resp.statusCode} '
+          'code=${data['code']}',
+        );
+        final list = data['data']?['disslist'];
+        if (list is List) {
+          for (final item in list.whereType<Map>()) {
+            // dir_show == 0 为隐藏歌单（如 QZone 背景音乐）
+            if ((item['dir_show'] ?? 1) == 0) continue;
+            final tid = item['tid']?.toString() ?? '';
+            final dirid = item['dirid']?.toString() ?? '';
+            if (tid == '0' && dirid.isEmpty) continue;
+            result.add(
+              MyPlaylist(
+                id: tid.isNotEmpty && tid != '0' ? tid : dirid,
+                dirId: int.tryParse(dirid) ?? 0,
+                name: item['diss_name']?.toString() ?? '未命名歌单',
+                count: (item['song_cnt'] as num?)?.toInt() ?? 0,
+                coverUrl: _https(item['diss_cover']?.toString()),
+                isCreated: true,
+              ),
+            );
+          }
+          createdOk = true;
+        }
+      } catch (e) {
+        // 创建列表失败不影响收藏列表
+        debugPrint('[diag] created_diss exception: $e');
+      }
     }
 
     // 2) 收藏的歌单
@@ -256,14 +349,14 @@ class QQMusicClient {
       throw const QQMusicException('获取我的歌单失败：请尝试重新登录');
     }
 
-    // 去重 + 「我喜欢」置顶
+    // 去重 + 「我喜欢」（dirId=201）置顶
     final seen = <String>{};
     final unique = result.where((p) {
       if (seen.contains(p.id)) return false;
       seen.add(p.id);
       return true;
     }).toList();
-    unique.sort((a, b) => (a.id == '201' ? 0 : 1) - (b.id == '201' ? 0 : 1));
+    unique.sort((a, b) => (a.dirId == 201 ? 0 : 1) - (b.dirId == 201 ? 0 : 1));
     return unique;
   }
 
