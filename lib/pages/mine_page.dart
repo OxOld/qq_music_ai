@@ -286,87 +286,8 @@ class MinePageState extends ConsumerState<MinePage> {
       backgroundColor: AppColors.bg,
       body: Column(
         children: [
-          // ---------- 头部（固定，不随列表滚动） ----------
-          Container(
-            decoration: BoxDecoration(
-              gradient: AppColors.brandGradient,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(28),
-                bottomRight: Radius.circular(28),
-              ),
-            ),
-            padding: EdgeInsets.fromLTRB(24, 0, 24, landscape ? 14 : 24),
-            child: SafeArea(
-              bottom: false,
-              child: landscape
-                  ? Row(
-                      children: [
-                        const Icon(
-                          Icons.person_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          '我的',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            auth.isLoggedIn
-                                ? 'QQ：${auth.uin}'
-                                : '登录后可查看与播放自己的歌单',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              fontSize: 12.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 14),
-                        const Row(
-                          children: [
-                            Icon(
-                              Icons.person_rounded,
-                              color: Colors.white,
-                              size: 26,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              '我的',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          auth.isLoggedIn ? 'QQ：${auth.uin}' : '登录后可查看与播放自己的歌单',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
+          // ---------- 头部：竖屏页内渲染；横屏由 RootPage 顶部通栏渲染 ----------
+          if (!landscape) const MineHeader(),
           // ---------- 滚动区（横屏限宽居中，避免投屏窄窗口下卡片过宽） ----------
           Expanded(
             child: Center(
@@ -560,6 +481,93 @@ class MinePageState extends ConsumerState<MinePage> {
 }
 
 // ---------- 菜单行 ----------
+
+/// 「我的」品牌头部：竖屏在页面内渲染；横屏由 RootPage 提到顶部通栏渲染
+class MineHeader extends ConsumerWidget {
+  const MineHeader({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(qqAuthProvider);
+    // 横屏压缩高度，标题与账号信息同一行
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(24, 0, 24, landscape ? 14 : 24),
+      child: SafeArea(
+        bottom: false,
+        child: landscape
+            ? Row(
+                children: [
+                  const Icon(
+                    Icons.person_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    '我的',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      auth.isLoggedIn ? 'QQ：${auth.uin}' : '登录后可查看与播放自己的歌单',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  const Row(
+                    children: [
+                      Icon(Icons.person_rounded, color: Colors.white, size: 26),
+                      SizedBox(width: 10),
+                      Text(
+                        '我的',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    auth.isLoggedIn ? 'QQ：${auth.uin}' : '登录后可查看与播放自己的歌单',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
 
 class _MenuRow extends StatelessWidget {
   final IconData icon;

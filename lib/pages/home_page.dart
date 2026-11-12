@@ -330,10 +330,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         MediaQuery.of(context).orientation == Orientation.landscape;
     final pad = landscape ? 24.0 : 16.0;
 
-    // 顶部固定 + 下方滚动
+    // 顶部固定 + 下方滚动；横屏时头部由 RootPage 提到顶部通栏渲染（页面内不再重复）
     return Column(
       children: [
-        _Header(),
+        if (!landscape) const HomeHeader(),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -412,9 +412,11 @@ class _HomePageState extends ConsumerState<HomePage> {
 }
 
 // ---------- 头部（固定，不随内容滚动；登录/设置入口已移至「我的」） ----------
+// 竖屏在页面内渲染；横屏由 RootPage 提到顶部通栏渲染（车机投屏观感更整）
 
-class _Header extends StatelessWidget {
-  const _Header();
+/// 首页品牌头部
+class HomeHeader extends StatelessWidget {
+  const HomeHeader({super.key});
 
   @override
   Widget build(BuildContext context) {

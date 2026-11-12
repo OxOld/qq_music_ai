@@ -8,8 +8,8 @@ import 'mine_page.dart';
 
 /// 根页面：「首页 / 我的」双 Tab + 迷你播放条
 ///
-/// 竖屏：底部 NavigationBar；横屏（车机投屏 / 平板）：左侧自绘侧栏
-/// （导航按钮垂直居中，避免矮窗口/旋转窗口下贴边被裁），
+/// 竖屏：页面内品牌头部 + 底部 NavigationBar；
+/// 横屏（车机投屏 / 平板）：顶部通栏品牌头部（拉满整宽）+ 左侧 NavigationRail，
 /// 底部只保留迷你播放条，把纵向空间让给内容。
 ///
 /// 监听主题切换：AppColors 是静态取值，需要整棵树重跑 build 才会换色
@@ -75,74 +75,12 @@ class _RootPageState extends State<RootPage> {
     ],
   );
 
-  /// 横屏侧栏：两个导航按钮**垂直居中**。
-  /// 不用 NavigationRail：其目的地固定顶部对齐，车机投屏的矮窗口/旋转窗口下
-  /// 贴边按钮容易被裁掉；自绘同外观侧栏并居中放置（侧栏本身已延伸到状态栏下，
-  /// 占满整列高度，居中后上下留白对称）。
-  Widget _sideRail() {
-    return Container(
-      width: 78,
-      color: Colors.white,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _railItem(0, Icons.home_outlined, Icons.home_rounded, '首页'),
-          const SizedBox(height: 20),
-          _railItem(
-            1,
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            '我的',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _railItem(
-    int index,
-    IconData icon,
-    IconData selectedIcon,
-    String label,
-  ) {
-    final selected = _index == index;
-    final color = selected ? AppColors.brandDeep : AppColors.textSecondary;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: () => _select(index),
-        child: Container(
-          width: 64,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.brandSoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(selected ? selectedIcon : icon, size: 26, color: color),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  /// 横屏顶部通栏头部：按当前 Tab 显示对应品牌头部（拉满整宽，观感更整）
+  Widget _topHeader() => _index == 0 ? const HomeHeader() : const MineHeader();
 
   @override
   Widget build(BuildContext context) {
-    // 横屏（车机投屏 / 平板）：左侧导航栏 + 右侧内容。
+    // 横屏（车机投屏 / 平板）：顶部通栏头部 + 左侧导航栏 + 右侧内容。
     // 用 MediaQuery.orientation（窗口 surface 方向）而非宽高比较：
     // 车机投屏窗口可能被系统旋转 90° 呈现，宽高比与 surface 方向不一致。
     final wide = MediaQuery.of(context).orientation == Orientation.landscape;
@@ -151,15 +89,59 @@ class _RootPageState extends State<RootPage> {
       value: kStatusOverlayLight,
       child: Scaffold(
         body: wide
-            ? Row(
+            ? Column(
                 children: [
-                  _sideRail(),
-                  VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: AppColors.textPrimary.withValues(alpha: 0.08),
+                  _topHeader(),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        NavigationRail(
+                          selectedIndex: _index,
+                          onDestinationSelected: _select,
+                          backgroundColor: Colors.white,
+                          indicatorColor: AppColors.brandSoft,
+                          minWidth: 78,
+                          labelType: NavigationRailLabelType.all,
+                          selectedIconTheme: IconThemeData(
+                            color: AppColors.brandDeep,
+                            size: 26,
+                          ),
+                          unselectedIconTheme: IconThemeData(
+                            color: AppColors.textSecondary,
+                            size: 26,
+                          ),
+                          selectedLabelTextStyle: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.brandDeep,
+                          ),
+                          unselectedLabelTextStyle: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                          destinations: const [
+                            NavigationRailDestination(
+                              icon: Icon(Icons.home_outlined),
+                              selectedIcon: Icon(Icons.home_rounded),
+                              label: Text('首页'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.person_outline_rounded),
+                              selectedIcon: Icon(Icons.person_rounded),
+                              label: Text('我的'),
+                            ),
+                          ],
+                        ),
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppColors.textPrimary.withValues(alpha: 0.08),
+                        ),
+                        Expanded(child: _pages()),
+                      ],
+                    ),
                   ),
-                  Expanded(child: _pages()),
                 ],
               )
             : _pages(),
