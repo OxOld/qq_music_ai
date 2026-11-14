@@ -333,7 +333,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 顶部固定 + 下方滚动；横屏时头部由 RootPage 提到顶部通栏渲染（页面内不再重复）
     return Column(
       children: [
-        if (!landscape) const HomeHeader(),
+        // 非 const：主题切换时重建 widget（State 保留，AppColors 取到新值）
+        if (!landscape) HomeHeader(),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -434,6 +435,9 @@ class HomeHeader extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(24, 0, 24, landscape ? 14 : 24),
       child: SafeArea(
         bottom: false,
+        // 车机全屏投屏时系统可能不提供状态栏内边距（SafeArea 顶部为 0），
+        // 标题会贴顶；横屏补最小顶部留白，与底部 14 对称。
+        minimum: EdgeInsets.only(top: landscape ? 14 : 0),
         child: landscape
             ? Row(
                 children: [

@@ -138,7 +138,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
             // ---------- 投屏诊断（车机排查窗口方向/比例用） ----------
-            const _DisplayDiagCard(),
+            // 非 const：主题切换时重建（const 实例会被复用，品牌色小图标不刷新）
+            _DisplayDiagCard(),
             SizedBox(height: 12),
 
             // ---------- 主题色 ----------

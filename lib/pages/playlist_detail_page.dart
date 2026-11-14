@@ -211,6 +211,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
               padding: const EdgeInsets.fromLTRB(8, 0, 16, 18),
               child: SafeArea(
                 bottom: false,
+                // 车机全屏投屏时系统可能不提供状态栏内边距，补最小顶部留白避免封面贴顶
+                minimum: const EdgeInsets.only(top: 12),
                 child: Row(
                   children: [
                     IconButton(

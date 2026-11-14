@@ -76,7 +76,10 @@ class _RootPageState extends State<RootPage> {
   );
 
   /// 横屏顶部通栏头部：按当前 Tab 显示对应品牌头部（拉满整宽，观感更整）
-  Widget _topHeader() => _index == 0 ? const HomeHeader() : const MineHeader();
+  ///
+  /// 非 const：主题切换时重建（const 实例会被 Element 复用、不重跑 build，
+  /// 导致头部要等切换 Tab 才变色）。
+  Widget _topHeader() => _index == 0 ? HomeHeader() : MineHeader();
 
   @override
   Widget build(BuildContext context) {
