@@ -5,65 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/qq_auth_state.dart';
 import '../models/qq_song.dart';
 
-/// QQ 音乐登录态
-class QQAuthState {
-  final String cookie;
-  final String uin;
-  final String skey;
-  final String musickey;
-
-  const QQAuthState({
-    this.cookie = '',
-    this.uin = '',
-    this.skey = '',
-    this.musickey = '',
-  });
-
-  bool get isLoggedIn => cookie.isNotEmpty && uin.isNotEmpty;
-
-  /// 从 Cookie 字符串解析登录态（兼容 QQ 登录 / 微信登录的多种字段）
-  factory QQAuthState.fromCookie(String cookie) {
-    String extract(String key) {
-      for (final part in cookie.split(';')) {
-        final trimmed = part.trim();
-        final eq = trimmed.indexOf('=');
-        if (eq > 0 && trimmed.substring(0, eq) == key) {
-          return trimmed.substring(eq + 1);
-        }
-      }
-      return '';
-    }
-
-    // uin：优先 uin，其次 p_uin（网页登录），其次 wxuin（微信）
-    var uin = extract('uin');
-    if (uin.isEmpty) uin = extract('p_uin');
-    if (uin.isEmpty) uin = extract('wxuin');
-    // QQ 号常带 o0 前缀，如 uin=o0123456789
-    if (uin.startsWith('o0')) {
-      uin = uin.substring(2);
-    } else if (uin.startsWith('o')) {
-      uin = uin.substring(1);
-    }
-
-    // skey：优先 skey，其次 p_skey，其次 wxskey
-    var skey = extract('skey');
-    if (skey.isEmpty) skey = extract('p_skey');
-    if (skey.isEmpty) skey = extract('wxskey');
-
-    // musickey：qm_keyst / qqmusic_key（musicu 写接口的 authst）
-    var musickey = extract('qm_keyst');
-    if (musickey.isEmpty) musickey = extract('qqmusic_key');
-
-    return QQAuthState(
-      cookie: cookie,
-      uin: uin,
-      skey: skey,
-      musickey: musickey,
-    );
-  }
-}
+export '../models/qq_auth_state.dart';
 
 /// 腾讯 g_tk 算法（基于 skey）
 int _getGTK(String skey) {
@@ -693,9 +638,27 @@ class QQMusicClient {
     } catch (_) {}
   }
 
+  /// 清空播放 URL 缓存（内存 + 持久化）
+  Future<void> clearUrlCache() async {
+    _urlCache.clear();
+    _urlCacheLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_urlCacheKey);
+    } catch (_) {}
+  }
+
   /// 获取歌曲播放链接（本地优先：缓存未过期直接用）。
   /// sip 前缀统一替换为 https（实测可用）。
+  ///
+  /// 登录态失效时抛 [QQMusicAuthExpiredException]（而非笼统的
+  /// "会员/版权限制"）——典型表现为「列表正常、VIP 歌曲播不了」，
+  /// 重新登录即恢复。此时会顺带清空 URL 缓存，避免旧登录态链接残留。
   Future<String> getPlayUrl(QQAuthState auth, String songmid) async {
+    if (!auth.isLoggedIn) {
+      await clearUrlCache();
+      throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+    }
     await _ensureUrlCache();
     final cached = _cachedPlayUrl(songmid);
     if (cached != null) return cached;
@@ -725,13 +688,29 @@ class QQMusicClient {
       throw QQMusicException('获取播放链接失败 (${resp.statusCode})');
     }
     final data = jsonDecode(_decode(resp.bodyBytes));
+    final req1 = data['req_1'];
+    // 登录态失效：服务端不会返回 401，而是 code != 0（如 1000）
+    if (req1 is Map && req1['code'] != 0) {
+      final code = req1['code'];
+      if (code == 1000 || code == 301) {
+        await clearUrlCache();
+        throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+      }
+      // 其他业务码保持原逻辑：midurlinfo 为空 -> 暂无播放链接
+      debugPrint('[diag] CgiGetVkey code=$code');
+    }
     final midurlinfo = _digList(data, ['req_1', 'data', 'midurlinfo']);
     if (midurlinfo.isEmpty) {
       throw const QQMusicException('该歌曲暂无播放链接');
     }
     final purl = (midurlinfo.first as Map)['purl']?.toString() ?? '';
     if (purl.isEmpty) {
-      throw const QQMusicException('该歌曲暂无播放链接（可能为会员/版权限制）');
+      // purl 为空但响应正常：要么真是会员/版权限制，要么登录态被降级
+      // （QM 提示「当前可能需要会员」）。抛登录失效让 UI 引导重登，
+      // 用户重登后即恢复；真版权受限的歌重登也一样播不了，提示同样成立。
+      throw const QQMusicAuthExpiredException(
+        '该歌曲暂无播放链接（登录态可能已过期，请重新登录后再试）',
+      );
     }
     final prefix = (midurlinfo.first as Map)['sip'] is List
         ? ((midurlinfo.first['sip'] as List).isNotEmpty
@@ -766,11 +745,141 @@ class QQMusicClient {
     }
     return cur is List ? cur : const [];
   }
+
+  // ---------- 登录态续期 ----------
+
+  /// 用 refresh_token 续期登录态（QQ 登录），返回刷新后的 Cookie。
+  ///
+  /// qm_keyst（musickey）有效期约 3 天且是滑动窗口——需要期间内
+  /// 用旧 key 访问一次才会续期；App 数天不开，窗口一过 key 就失效，
+  /// 表现为「列表正常（部分接口无需登录）但 VIP 歌曲播放提示需会员」。
+  /// 这里参照 QMusicCookieRefresh 的做法，POST 旧 Cookie 到
+  /// QQConnectLogin.LoginServer.QQLogin，取返回的 musickey /
+  /// psrf_musickey_createtime 替换回 Cookie。仅支持 QQ 登录
+  /// （微信登录无 refresh_token，只能重新扫码）。
+  ///
+  /// 返回 null 表示续期不可用（非 QQ 登录 / 缺 refresh_token / 失败）。
+  Future<String?> refreshCookie(QQAuthState auth) async {
+    String extract(String key) {
+      for (final part in auth.cookie.split(';')) {
+        final t = part.trim();
+        final eq = t.indexOf('=');
+        if (eq > 0 && t.substring(0, eq) == key) {
+          return t.substring(eq + 1);
+        }
+      }
+      return '';
+    }
+
+    final refreshToken = extract('psrf_qqrefresh_token');
+    final accessToken = extract('psrf_qqaccess_token');
+    // 无 refresh_token（微信登录或网页精简 Cookie）无法续期
+    if (refreshToken.isEmpty || accessToken.isEmpty) return null;
+
+    try {
+      final resp = await _client
+          .post(
+            Uri.parse('https://u.y.qq.com/cgi-bin/musicu.fcg'),
+            headers: _authedHeaders(auth),
+            body: jsonEncode({
+              'comm': {'ct': 19, 'cv': 0, 'tmeLoginType': 2},
+              'req_1': {
+                'module': 'QQConnectLogin.LoginServer',
+                'method': 'QQLogin',
+                'param': {
+                  'onlyNeedAccessToken': 0,
+                  'forceRefreshToken': 0,
+                  'psrf_qqopenid': extract('psrf_qqopenid'),
+                  'refresh_token': refreshToken,
+                  'access_token': accessToken,
+                  'expired_at': extract('psrf_access_token_expiresAt'),
+                  'musicid': auth.uin,
+                  'musickey': auth.musickey,
+                  'musickeyCreateTime': extract('psrf_musickey_createtime'),
+                  'unionid': extract('psrf_qqunionid'),
+                  'str_musicid': auth.uin,
+                  'encryptUin': extract('euin'),
+                },
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(_decode(resp.bodyBytes));
+      final req = data['req_1'];
+      if (req is! Map || req['code'] != 0) {
+        debugPrint('[diag] refresh code=${req?['code']}');
+        return null;
+      }
+      final d = req['data'];
+      final newKey = d?['musickey']?.toString() ?? '';
+      if (newKey.isEmpty) return null;
+
+      // 将新 key / 新 createtime 替换回旧 Cookie，其余字段原样保留
+      final newCreateTime =
+          d?['musickeyCreateTime']?.toString() ?? '';
+      var updated = _replaceCookieValue(auth.cookie, 'qm_keyst', newKey);
+      updated = _replaceCookieValue(updated, 'qqmusic_key', newKey);
+      if (newCreateTime.isNotEmpty) {
+        updated = _replaceCookieValue(
+          updated,
+          'psrf_musickey_createtime',
+          newCreateTime,
+        );
+      }
+      final newRefresh = d?['refresh_token']?.toString() ?? '';
+      if (newRefresh.isNotEmpty) {
+        updated = _replaceCookieValue(
+          updated,
+          'psrf_qqrefresh_token',
+          newRefresh,
+        );
+      }
+      final newAccess = d?['access_token']?.toString() ?? '';
+      if (newAccess.isNotEmpty) {
+        updated = _replaceCookieValue(
+          updated,
+          'psrf_qqaccess_token',
+          newAccess,
+        );
+      }
+      // 响应可能带 Set-Cookie（如刷新后的 skey），交给上层合并
+      return updated;
+    } catch (e) {
+      debugPrint('[diag] refresh exception: $e');
+      return null;
+    }
+  }
+
+  /// 替换 Cookie 字符串中指定 key 的值；key 不存在则追加
+  static String _replaceCookieValue(String cookie, String key, String value) {
+    final regExp = RegExp(
+      '(^|;\\s*)$key=([^;]*)',
+      caseSensitive: false,
+    );
+    if (regExp.hasMatch(cookie)) {
+      return cookie.replaceFirstMapped(regExp, (m) => '${m[1]}$key=$value');
+    }
+    return cookie.isEmpty ? '$key=$value' : '$cookie; $key=$value';
+  }
 }
 
 class QQMusicException implements Exception {
   final String message;
   const QQMusicException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// 登录态失效（musickey 过期 / 被顶号 / 未登录）。
+///
+/// 特征：列表类只读接口仍可用（有的甚至无需登录），但 vkey 等
+/// 需要鉴权的接口会拒绝，表现为「列表正常、VIP 歌曲播放提示需会员」。
+/// 抛出此异常时 UI 应引导用户重新扫码登录。
+class QQMusicAuthExpiredException implements Exception {
+  final String message;
+  const QQMusicAuthExpiredException(this.message);
 
   @override
   String toString() => message;

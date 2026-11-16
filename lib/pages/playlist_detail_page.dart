@@ -13,6 +13,7 @@ import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/song_manage_sheet.dart';
+import 'login_page.dart';
 
 /// 歌单详情：歌曲列表 + 单曲播放 + 播放全部
 class PlaylistDetailPage extends ConsumerStatefulWidget {
@@ -115,11 +116,44 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     if (_preparingIndex != null) return;
     unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _preparingIndex = index);
+    var authExpired = false;
     try {
-      final (urls, titles, covers, indexMap) = await _prepareQueue(songs);
+      var (urls, titles, covers, indexMap) = await _prepareQueue(songs);
+      // 全部失败且是登录态过期：续期后重试一次
+      if (indexMap.isEmpty) {
+        final auth = ref.read(qqAuthProvider);
+        try {
+          await ref.read(qqMusicClientProvider).getPlayUrl(auth, songs.first.mid);
+        } on QQMusicAuthExpiredException {
+          authExpired = true;
+          await ref.read(qqAuthProvider.notifier).refresh();
+          final refreshed = await _prepareQueue(songs);
+          urls = refreshed.$1;
+          titles = refreshed.$2;
+          covers = refreshed.$3;
+          indexMap = refreshed.$4;
+        } on QQMusicException {
+          // 链接确实取不到（非登录态问题），走下方空队列提示
+        }
+      }
       if (!mounted) return;
       if (indexMap.isEmpty) {
-        AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
+        if (authExpired) {
+          final relogin = await showAppConfirmDialog(
+            context,
+            title: '登录已过期',
+            message: '播放 VIP 歌曲需要有效的登录态。\n重新扫码登录后即可恢复。',
+            confirmLabel: '重新登录',
+            icon: Icons.login_rounded,
+          );
+          if (relogin && mounted) {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+          }
+        } else {
+          AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
+        }
         return;
       }
       final startIndex = index < indexMap.length
@@ -144,11 +178,45 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     if (_preparingIndex != null) return;
     unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _preparingIndex = 0);
+    var authExpired = false;
     try {
-      final (urls, titles, covers, indexMap) = await _prepareQueue(songs);
+      var (urls, titles, covers, indexMap) = await _prepareQueue(songs);
+      if (indexMap.isEmpty) {
+        final auth = ref.read(qqAuthProvider);
+        try {
+          await ref
+              .read(qqMusicClientProvider)
+              .getPlayUrl(auth, songs.first.mid);
+        } on QQMusicAuthExpiredException {
+          authExpired = true;
+          await ref.read(qqAuthProvider.notifier).refresh();
+          final refreshed = await _prepareQueue(songs);
+          urls = refreshed.$1;
+          titles = refreshed.$2;
+          covers = refreshed.$3;
+          indexMap = refreshed.$4;
+        } on QQMusicException {
+          // 真取不到链接，走下方空队列提示
+        }
+      }
       if (!mounted) return;
       if (indexMap.isEmpty) {
-        AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
+        if (authExpired) {
+          final relogin = await showAppConfirmDialog(
+            context,
+            title: '登录已过期',
+            message: '播放 VIP 歌曲需要有效的登录态。\n重新扫码登录后即可恢复。',
+            confirmLabel: '重新登录',
+            icon: Icons.login_rounded,
+          );
+          if (relogin && mounted) {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+          }
+        } else {
+          AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
+        }
         return;
       }
       await ref

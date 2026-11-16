@@ -10,6 +10,7 @@ import '../services/battery_service.dart';
 import '../services/match_service.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
 import 'login_page.dart';
 import 'settings_page.dart';
@@ -227,18 +228,41 @@ class _HomePageState extends ConsumerState<HomePage> {
   // ---------- 播放 ----------
 
   Future<void> _playMatch(MatchResult r) async {
-    final auth = ref.read(qqAuthProvider);
+    var auth = ref.read(qqAuthProvider);
     final song = r.matched;
     if (song == null || _loadingPlayMid != null || _playAllLoading) return;
     unawaited(BatteryService.maybePromptOnPlay(context));
     setState(() => _loadingPlayMid = song.mid);
     try {
-      final url = await ref
-          .read(qqMusicClientProvider)
-          .getPlayUrl(auth, song.mid);
-      await ref
-          .read(playerServiceProvider)
-          .playUrl(url, title: song.name, cover: song.coverUrl);
+      final client = ref.read(qqMusicClientProvider);
+      try {
+        final url = await client.getPlayUrl(auth, song.mid);
+        await ref
+            .read(playerServiceProvider)
+            .playUrl(url, title: song.name, cover: song.coverUrl);
+      } on QQMusicAuthExpiredException {
+        // 登录态过期：先静默续期一次，仍失败再引导重新登录
+        await ref.read(qqAuthProvider.notifier).refresh();
+        auth = ref.read(qqAuthProvider);
+        final url = await client.getPlayUrl(auth, song.mid);
+        await ref
+            .read(playerServiceProvider)
+            .playUrl(url, title: song.name, cover: song.coverUrl);
+      }
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      final relogin = await showAppConfirmDialog(
+        context,
+        title: '登录已过期',
+        message: '播放 VIP 歌曲需要有效的登录态。\n重新扫码登录后即可恢复。',
+        confirmLabel: '重新登录',
+        icon: Icons.login_rounded,
+      );
+      if (relogin && mounted) {
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => LoginPage()));
+      }
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '$e', error: true);
@@ -291,7 +315,20 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
       if (!mounted) return;
       if (okUrls.isEmpty) {
-        AppToast.show(context, '没有可播放的歌曲');
+        // 全部失败大概率是登录态过期（列表正常但 vkey 全拒绝）
+        final relogin = await showAppConfirmDialog(
+          context,
+          title: '未能获取播放链接',
+          message: '可能登录态已过期（列表正常但 VIP 歌曲取不到链接）。\n'
+              '重新扫码登录后即可恢复。',
+          confirmLabel: '重新登录',
+          icon: Icons.login_rounded,
+        );
+        if (relogin && mounted) {
+          await Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => LoginPage()));
+        }
         return;
       }
       await ref
