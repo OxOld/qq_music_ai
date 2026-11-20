@@ -8,6 +8,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 播放模式
 enum PlayMode { listLoop, singleLoop, sequential, shuffle }
 
+/// 恢复队列换链接的结果
+class UrlRefreshResult {
+  /// 与传入 mids 等长：换到新链接的下标为新 URL，失败为 null
+  final List<String?> urls;
+
+  /// true = 换链接时发现登录态过期（UI 应引导重新登录）
+  final bool authExpired;
+
+  const UrlRefreshResult(this.urls, {this.authExpired = false});
+}
+
+/// 恢复队列播放前的批量换链接回调（main 里注入，本服务不依赖登录态）
+typedef UrlRefresher = Future<UrlRefreshResult?> Function(List<String> mids);
+
 /// 播放器服务
 ///
 /// - ConcatenatingAudioSource 队列播放：系统媒体通知栏带上一首/播放暂停/下一首
@@ -50,6 +64,7 @@ class PlayerService {
   final Random _random = Random();
 
   List<String> _queue = [];
+  List<String> _mids = [];
   List<String> _titles = [];
   List<String> _covers = [];
   int _index = 0;
@@ -60,6 +75,16 @@ class PlayerService {
   bool _restoredPending = false;
   Duration _savedPosition = Duration.zero;
 
+  /// 恢复队列播放前换新链接的回调（vkey 链接数小时即失效，
+  /// 持久化的旧链接直接播会失败）；main 里注入，默认空 = 旧行为
+  UrlRefresher? urlRefresher;
+
+  /// 恢复播放正在换新链接（UI 可显示等待状态）
+  bool _restoring = false;
+
+  /// 上一次恢复播放时是否发现登录态过期（UI 读后引导重登）
+  bool _lastRestoreAuthExpired = false;
+
   /// 任何会影响 UI 的状态变化后触发（含恢复完成）
   final _changes = StreamController<void>.broadcast();
   Stream<void> get changeStream => _changes.stream;
@@ -69,6 +94,12 @@ class PlayerService {
   int get index => _index;
   int get queueLength => _queue.length;
   PlayMode get mode => _mode;
+
+  /// 恢复播放正在换新链接（UI 显示等待状态）
+  bool get restoring => _restoring;
+
+  /// 上一次恢复播放时是否发现登录态过期（UI 读后引导重登）
+  bool get lastRestoreAuthExpired => _lastRestoreAuthExpired;
 
   String? get currentTitle => _titles.isEmpty
       ? null
@@ -111,14 +142,17 @@ class PlayerService {
     }
   }
 
-  /// 播放一个 URL 队列（titles / covers 与 urls 一一对应，用于展示）
+  /// 播放一个 URL 队列（mids / titles / covers 与 urls 一一对应：
+  /// mid 用于恢复播放时换新链接，titles / covers 用于展示）
   Future<void> playQueue(
     List<String> urls, {
+    List<String> mids = const [],
     List<String> titles = const [],
     List<String> covers = const [],
     int startIndex = 0,
   }) async {
     _queue = urls;
+    _mids = mids.length == urls.length ? mids : List.filled(urls.length, '');
     _titles = titles.length == urls.length
         ? titles
         : List.filled(urls.length, '');
@@ -134,8 +168,14 @@ class PlayerService {
   }
 
   /// 播放单个 URL
-  Future<void> playUrl(String url, {String? title, String? cover}) async {
+  Future<void> playUrl(
+    String url, {
+    String? mid,
+    String? title,
+    String? cover,
+  }) async {
     _queue = [url];
+    _mids = [mid ?? ''];
     _titles = [title ?? ''];
     _covers = [cover ?? ''];
     _index = 0;
@@ -182,14 +222,49 @@ class PlayerService {
   }
 
   Future<void> resume() async {
-    // 恢复的队列尚未加载音频源（vkey 链接有时效，过期则失败）
+    // 恢复的队列尚未加载音频源；持久化的 vkey 链接数小时即失效，
+    // 先按 mid 整队换新链接再加载（近期播过的由 client 缓存秒回）
     if (_restoredPending && _queue.isNotEmpty) {
+      await _refreshRestoredUrls();
       await _buildAndLoad(_index, autoplay: true);
       // 恢复出的进度只在这一步使用一次
       _savedPosition = Duration.zero;
       return;
     }
     _player.play();
+  }
+
+  /// 恢复播放前把队列里的旧 vkey 链接批量换成新的。
+  /// 回调未注入 / 队列无 mid（旧版本持久化的数据）/ 回调失败时，
+  /// 保留旧链接按原行为播放（可能播不了，与旧行为一致）。
+  Future<void> _refreshRestoredUrls() async {
+    final refresher = urlRefresher;
+    final hasMids =
+        _mids.length == _queue.length && _mids.any((m) => m.isNotEmpty);
+    if (refresher == null || !hasMids) return;
+    _restoring = true;
+    _lastRestoreAuthExpired = false;
+    _notify();
+    try {
+      final result = await refresher(_mids);
+      if (result == null) return;
+      _lastRestoreAuthExpired = result.authExpired;
+      var changed = false;
+      for (var i = 0; i < _queue.length && i < result.urls.length; i++) {
+        final u = result.urls[i];
+        if (u != null && u.isNotEmpty && u != _queue[i]) {
+          _queue[i] = u;
+          changed = true;
+        }
+      }
+      // 换新后的链接落盘，下次恢复不需要再换
+      if (changed) unawaited(_persistQueue());
+    } catch (_) {
+      // 换链接失败不影响原流程：保留旧链接尝试播放
+    } finally {
+      _restoring = false;
+      _notify();
+    }
   }
 
   Future<void> toggle() async {
@@ -267,6 +342,7 @@ class PlayerService {
     if (i < 0 || i >= _queue.length) return;
     final wasCurrent = i == _index;
     _queue.removeAt(i);
+    if (_mids.length == _queue.length + 1) _mids.removeAt(i);
     _titles.removeAt(i);
     _covers.removeAt(i);
     if (_queue.isEmpty) {
@@ -289,6 +365,7 @@ class PlayerService {
   /// 清空队列并停止播放
   Future<void> clear() async {
     _queue = [];
+    _mids = [];
     _titles = [];
     _covers = [];
     _index = 0;
@@ -314,6 +391,7 @@ class PlayerService {
   Future<void> _persistQueue() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('player_queue', _queue);
+    await prefs.setStringList('player_mids', _mids);
     await prefs.setStringList('player_titles', _titles);
     await prefs.setStringList('player_covers', _covers);
     await prefs.setInt('player_index', _index);
@@ -336,10 +414,15 @@ class PlayerService {
       final urls = prefs.getStringList('player_queue') ?? [];
       if (urls.isNotEmpty) {
         _queue = urls;
+        _mids = prefs.getStringList('player_mids') ??
+            List.filled(urls.length, '');
         _titles =
             prefs.getStringList('player_titles') ?? List.filled(urls.length, '');
         _covers = prefs.getStringList('player_covers') ??
             List.filled(urls.length, '');
+        if (_mids.length != urls.length) {
+          _mids = List.filled(urls.length, '');
+        }
         if (_titles.length != urls.length) {
           _titles = List.filled(urls.length, '');
         }

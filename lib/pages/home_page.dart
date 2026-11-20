@@ -239,7 +239,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         final url = await client.getPlayUrl(auth, song.mid);
         await ref
             .read(playerServiceProvider)
-            .playUrl(url, title: song.name, cover: song.coverUrl);
+            .playUrl(url, mid: song.mid, title: song.name, cover: song.coverUrl);
       } on QQMusicAuthExpiredException {
         // 登录态过期：先静默续期一次，仍失败再引导重新登录
         await ref.read(qqAuthProvider.notifier).refresh();
@@ -247,7 +247,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         final url = await client.getPlayUrl(auth, song.mid);
         await ref
             .read(playerServiceProvider)
-            .playUrl(url, title: song.name, cover: song.coverUrl);
+            .playUrl(url, mid: song.mid, title: song.name, cover: song.coverUrl);
       }
     } on QQMusicAuthExpiredException {
       if (!mounted) return;
@@ -304,12 +304,14 @@ class _HomePageState extends ConsumerState<HomePage> {
       await Future.wait([worker(), worker(), worker()]);
 
       final okUrls = <String>[];
+      final okMids = <String>[];
       final titles = <String>[];
       final covers = <String>[];
       for (var i = 0; i < matched.length; i++) {
         final u = urls[i];
         if (u == null) continue;
         okUrls.add(u);
+        okMids.add(matched[i].mid);
         titles.add(matched[i].name);
         covers.add(matched[i].coverUrl ?? '');
       }
@@ -333,7 +335,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
       await ref
           .read(playerServiceProvider)
-          .playQueue(okUrls, titles: titles, covers: covers);
+          .playQueue(okUrls, mids: okMids, titles: titles, covers: covers);
     } finally {
       if (mounted) setState(() => _playAllLoading = false);
     }

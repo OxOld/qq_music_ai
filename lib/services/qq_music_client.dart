@@ -356,7 +356,15 @@ class QQMusicClient {
       throw QQMusicException('获取歌单歌曲失败 code=${req?['code']}');
     }
     final list = req['data']?['songlist'];
-    if (list is! List) return const [];
+    debugPrint(
+      '[diag] CgiGetDiss tid=$playlistId isLiked=$isLiked '
+      'songNum=${list is List ? list.length : '无列表'}',
+    );
+    // code=0 但没有 songlist：登录态降级等异常情况，明确报错而不是
+    // 让页面显示「歌单是空的」误导用户
+    if (list is! List) {
+      throw const QQMusicException('获取歌单歌曲失败（响应中没有歌曲列表）');
+    }
     return list
         .whereType<Map>()
         .map((e) => QQSong.fromSearchJson(Map<String, dynamic>.from(e)))
@@ -703,7 +711,18 @@ class QQMusicClient {
     if (midurlinfo.isEmpty) {
       throw const QQMusicException('该歌曲暂无播放链接');
     }
-    final purl = (midurlinfo.first as Map)['purl']?.toString() ?? '';
+    final info = midurlinfo.first as Map;
+    // 校验服务端回显的 songmid 与请求一致（实测接口逐条回显请求的歌曲）。
+    // 登录态降级时服务端可能对任意歌曲返回同一条兜底链接，若不校验，
+    // 整个队列都会被替换成同一条 URL——症状为「无论点哪个歌单都播出同一首」。
+    final echoed = info['songmid']?.toString() ?? '';
+    if (echoed.isNotEmpty && echoed != songmid) {
+      await clearUrlCache();
+      throw const QQMusicAuthExpiredException(
+        '播放链接校验失败（登录态可能已过期），请重新登录后再试',
+      );
+    }
+    final purl = info['purl']?.toString() ?? '';
     if (purl.isEmpty) {
       // purl 为空但响应正常：要么真是会员/版权限制，要么登录态被降级
       // （QM 提示「当前可能需要会员」）。抛登录失效让 UI 引导重登，

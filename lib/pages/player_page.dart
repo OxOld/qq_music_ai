@@ -8,6 +8,8 @@ import 'package:palette_generator/palette_generator.dart';
 import '../providers/providers.dart';
 import '../services/player_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialog.dart';
+import 'login_page.dart';
 
 /// 全屏播放页：大封面（旋转）+ 可拖动进度 + 控制按钮 + 播放列表。
 /// 竖屏为垂直布局，横屏自动切换为「封面左 / 控制右」布局。
@@ -22,6 +24,23 @@ class PlayerPage extends ConsumerStatefulWidget {
 
 class _PlayerPageState extends ConsumerState<PlayerPage>
     with SingleTickerProviderStateMixin {
+  /// 恢复队列播放时若发现登录态过期（换不到新链接），引导重新登录
+  Future<void> _maybePromptRelogin() async {
+    if (!ref.read(playerServiceProvider).lastRestoreAuthExpired) return;
+    final relogin = await showAppConfirmDialog(
+      context,
+      title: '登录已过期',
+      message: '队列里的播放链接已失效，且登录态过期换不到新链接。\n重新扫码登录后即可恢复播放。',
+      confirmLabel: '重新登录',
+      icon: Icons.login_rounded,
+    );
+    if (relogin && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    }
+  }
+
   late final AnimationController _rotateCtrl;
   StreamSubscription? _stateSub;
   StreamSubscription? _posSub;
@@ -538,15 +557,26 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 onTap: () async {
                   await service.toggle();
                   if (mounted) setState(() {});
+                  await _maybePromptRelogin();
                 },
                 child: SizedBox(
                   width: 68 * scale,
                   height: 68 * scale,
-                  child: Icon(
-                    _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 42 * scale,
-                    color: AppColors.brandDeep,
-                  ),
+                  child: service.restoring
+                      ? Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: AppColors.brandDeep,
+                          ),
+                        )
+                      : Icon(
+                          _playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 42 * scale,
+                          color: AppColors.brandDeep,
+                        ),
                 ),
               ),
             ),

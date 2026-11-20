@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../pages/login_page.dart';
 import '../pages/player_page.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
+import 'app_dialog.dart';
 
 /// 迷你播放条：显示当前歌曲、播放/暂停、上一首/下一首。
 /// 点击中部区域进入全屏播放页；无播放内容时自动隐藏。
@@ -76,6 +78,23 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => PlayerPage()),
     );
+  }
+
+  /// 恢复队列播放时若发现登录态过期（换不到新链接），引导重新登录
+  Future<void> _maybePromptRelogin() async {
+    if (!ref.read(playerServiceProvider).lastRestoreAuthExpired) return;
+    final relogin = await showAppConfirmDialog(
+      context,
+      title: '登录已过期',
+      message: '队列里的播放链接已失效，且登录态过期换不到新链接。\n重新扫码登录后即可恢复播放。',
+      confirmLabel: '重新登录',
+      icon: Icons.login_rounded,
+    );
+    if (relogin && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    }
   }
 
   @override
@@ -182,16 +201,29 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                     onTap: () async {
                       await service.toggle();
                       if (mounted) setState(() => _playing = service.playing);
+                      await _maybePromptRelogin();
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(7),
-                      child: Icon(
-                        _playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        size: 26,
-                        color: AppColors.brandDeep,
-                      ),
+                      child: service.restoring
+                          ? SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: AppColors.brandDeep,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              _playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: 26,
+                              color: AppColors.brandDeep,
+                            ),
                     ),
                   ),
                 ),

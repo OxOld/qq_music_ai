@@ -60,9 +60,28 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
       _error = null;
     });
     try {
-      final songs = await ref
-          .read(qqMusicClientProvider)
-          .getPlaylistSongs(auth, widget.playlist.id);
+      final client = ref.read(qqMusicClientProvider);
+      var songs = await client.getPlaylistSongs(auth, widget.playlist.id);
+      // 歌单应有多首却只返回 1 首：登录态降级时服务端的兜底表现，
+      // 静默续期后重试一次，仍不符则提示用户重登
+      if (songs.length == 1 && widget.playlist.count > 1) {
+        debugPrint(
+          '[diag] CgiGetDiss tid=${widget.playlist.id} '
+          'expect=${widget.playlist.count} got=1 -> refresh & retry',
+        );
+        await ref.read(qqAuthProvider.notifier).refresh();
+        songs = await ref
+            .read(qqMusicClientProvider)
+            .getPlaylistSongs(ref.read(qqAuthProvider), widget.playlist.id);
+        if (!mounted) return;
+        if (songs.length == 1 && widget.playlist.count > 1) {
+          AppToast.show(
+            context,
+            '仅获取到 1/${widget.playlist.count} 首，登录态可能已过期，建议重新登录',
+            error: true,
+          );
+        }
+      }
       if (!mounted) return;
       setState(() => _songs = songs);
     } catch (e) {
@@ -74,10 +93,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   }
 
   /// 预取整个歌单的播放链接（3 路并行；本地缓存命中的瞬间返回）
-  /// 返回 (urls, titles, covers, 原下标->队列下标映射)
-  Future<(List<String>, List<String>, List<String>, List<int>)> _prepareQueue(
-    List<QQSong> songs,
-  ) async {
+  /// 返回 (urls, mids, titles, covers, 原下标->队列下标映射)
+  Future<(List<String>, List<String>, List<String>, List<String>, List<int>)>
+  _prepareQueue(List<QQSong> songs) async {
     final auth = ref.read(qqAuthProvider);
     final client = ref.read(qqMusicClientProvider);
     final urls = List<String?>.filled(songs.length, null);
@@ -95,6 +113,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     await Future.wait([worker(), worker(), worker()]);
 
     final outUrls = <String>[];
+    final outMids = <String>[];
     final outTitles = <String>[];
     final outCovers = <String>[];
     final indexMap = <int>[]; // 原下标 -> 队列下标
@@ -103,129 +122,92 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
       if (u == null) continue;
       indexMap.add(outUrls.length);
       outUrls.add(u);
+      outMids.add(songs[i].mid);
       outTitles.add(songs[i].name);
       outCovers.add(songs[i].coverUrl ?? '');
     }
-    return (outUrls, outTitles, outCovers, indexMap);
+    return (outUrls, outMids, outTitles, outCovers, indexMap);
   }
 
-  /// 点击某一首：整个歌单入队，从该首开始播放
-  Future<void> _play(int index) async {
+  /// 播放链接预取 + 登录态自愈。
+  ///
+  /// 「塌缩」是多首歌单只取到 ≤1 条链接：登录态过期后逐首取链接全部失败，
+  /// 仅剩 URL 缓存里 60 分钟内取过的旧链接，队列就只剩那一首——表现为
+  /// 「无论点哪个歌单都播出同一首歌」。此时静默续期登录态后重试一次。
+  Future<(List<String>, List<String>, List<String>, List<String>, List<int>)>
+  _prepareQueueWithRecovery(List<QQSong> songs) async {
+    var result = await _prepareQueue(songs);
+    final collapsed = songs.length > 1 && result.$4.length <= 1;
+    if (result.$4.isEmpty || collapsed) {
+      debugPrint(
+        '[diag] prepareQueue songs=${songs.length} ok=${result.$4.length} '
+        '-> refresh & retry',
+      );
+      await ref.read(qqAuthProvider.notifier).refresh();
+      result = await _prepareQueue(songs);
+    }
+    return result;
+  }
+
+  /// 点击某一首（[index] 非 null，整单入队从该首开始播）或全部播放
+  Future<void> _startPlayback(int? index) async {
     final songs = _songs;
-    if (songs == null || songs.isEmpty || index >= songs.length) return;
+    if (songs == null || songs.isEmpty || (index != null && index >= songs.length)) {
+      return;
+    }
     if (_preparingIndex != null) return;
     unawaited(BatteryService.maybePromptOnPlay(context));
-    setState(() => _preparingIndex = index);
-    var authExpired = false;
+    setState(() => _preparingIndex = index ?? 0);
     try {
-      var (urls, titles, covers, indexMap) = await _prepareQueue(songs);
-      // 全部失败且是登录态过期：续期后重试一次
-      if (indexMap.isEmpty) {
-        final auth = ref.read(qqAuthProvider);
-        try {
-          await ref.read(qqMusicClientProvider).getPlayUrl(auth, songs.first.mid);
-        } on QQMusicAuthExpiredException {
-          authExpired = true;
-          await ref.read(qqAuthProvider.notifier).refresh();
-          final refreshed = await _prepareQueue(songs);
-          urls = refreshed.$1;
-          titles = refreshed.$2;
-          covers = refreshed.$3;
-          indexMap = refreshed.$4;
-        } on QQMusicException {
-          // 链接确实取不到（非登录态问题），走下方空队列提示
-        }
-      }
+      final (urls, mids, titles, covers, indexMap) =
+          await _prepareQueueWithRecovery(songs);
       if (!mounted) return;
       if (indexMap.isEmpty) {
-        if (authExpired) {
-          final relogin = await showAppConfirmDialog(
-            context,
-            title: '登录已过期',
-            message: '播放 VIP 歌曲需要有效的登录态。\n重新扫码登录后即可恢复。',
-            confirmLabel: '重新登录',
-            icon: Icons.login_rounded,
+        // 全部失败：实测登录态过期时所有歌的 purl 都是空的，引导重登
+        final relogin = await showAppConfirmDialog(
+          context,
+          title: '登录已过期',
+          message: '所有歌曲都取不到播放链接。\n重新扫码登录后即可恢复播放。',
+          confirmLabel: '重新登录',
+          icon: Icons.login_rounded,
+        );
+        if (relogin && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LoginPage()),
           );
-          if (relogin && mounted) {
-            await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LoginPage()),
-            );
-          }
-        } else {
-          AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
         }
         return;
       }
-      final startIndex = index < indexMap.length
-          ? indexMap[index]
-          : indexMap.first;
+      if (songs.length > 1 && indexMap.length <= 1) {
+        // 续期重试后仍只拿到 1 首：明确告知，而不是默默只播这一首
+        final relogin = await showAppConfirmDialog(
+          context,
+          title: '播放链接获取不全',
+          message:
+              '歌单 ${songs.length} 首中仅获取到 ${indexMap.length} 首的播放链接，'
+              '登录态可能已过期。重新扫码登录后通常可恢复。',
+          confirmLabel: '重新登录',
+          cancelLabel: '仍播放这 ${indexMap.length} 首',
+          icon: Icons.login_rounded,
+        );
+        if (relogin && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          );
+          return;
+        }
+      }
+      final startIndex = index == null
+          ? indexMap.first
+          : (index < indexMap.length ? indexMap[index] : indexMap.first);
       await ref
           .read(playerServiceProvider)
           .playQueue(
             urls,
+            mids: mids,
             titles: titles,
             covers: covers,
             startIndex: startIndex.clamp(0, urls.length - 1),
-          );
-    } finally {
-      if (mounted) setState(() => _preparingIndex = null);
-    }
-  }
-
-  Future<void> _playAll() async {
-    final songs = _songs;
-    if (songs == null || songs.isEmpty) return;
-    if (_preparingIndex != null) return;
-    unawaited(BatteryService.maybePromptOnPlay(context));
-    setState(() => _preparingIndex = 0);
-    var authExpired = false;
-    try {
-      var (urls, titles, covers, indexMap) = await _prepareQueue(songs);
-      if (indexMap.isEmpty) {
-        final auth = ref.read(qqAuthProvider);
-        try {
-          await ref
-              .read(qqMusicClientProvider)
-              .getPlayUrl(auth, songs.first.mid);
-        } on QQMusicAuthExpiredException {
-          authExpired = true;
-          await ref.read(qqAuthProvider.notifier).refresh();
-          final refreshed = await _prepareQueue(songs);
-          urls = refreshed.$1;
-          titles = refreshed.$2;
-          covers = refreshed.$3;
-          indexMap = refreshed.$4;
-        } on QQMusicException {
-          // 真取不到链接，走下方空队列提示
-        }
-      }
-      if (!mounted) return;
-      if (indexMap.isEmpty) {
-        if (authExpired) {
-          final relogin = await showAppConfirmDialog(
-            context,
-            title: '登录已过期',
-            message: '播放 VIP 歌曲需要有效的登录态。\n重新扫码登录后即可恢复。',
-            confirmLabel: '重新登录',
-            icon: Icons.login_rounded,
-          );
-          if (relogin && mounted) {
-            await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LoginPage()),
-            );
-          }
-        } else {
-          AppToast.show(context, '没有可播放的歌曲（可能都是会员歌曲）', error: true);
-        }
-        return;
-      }
-      await ref
-          .read(playerServiceProvider)
-          .playQueue(
-            urls,
-            titles: titles,
-            covers: covers,
-            startIndex: indexMap.first.clamp(0, urls.length - 1),
           );
     } finally {
       if (mounted) setState(() => _preparingIndex = null);
@@ -409,9 +391,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                             borderRadius: BorderRadius.circular(999),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(999),
-                              onTap: (_songs == null || _songs!.isEmpty)
-                                  ? null
-                                  : _playAll,
+                                onTap: (_songs == null || _songs!.isEmpty)
+                                    ? null
+                                    : () => _startPlayback(null),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 6,
@@ -548,7 +530,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: orig >= 0 ? () => _play(orig) : null,
+            onTap: orig >= 0 ? () => _startPlayback(orig) : null,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
               child: Row(
