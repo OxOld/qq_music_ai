@@ -630,6 +630,7 @@ class _PlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> skipToNext() async {
+    debugPrint('[diag] media button: skipToNext hasNext=$hasNext');
     if (hasNext) {
       await skipToQueueItem(nextIndex!);
     }
@@ -637,6 +638,7 @@ class _PlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> skipToPrevious() async {
+    debugPrint('[diag] media button: skipToPrevious hasPrev=$hasPrevious');
     if (hasPrevious) {
       await skipToQueueItem(previousIndex!);
     }
@@ -652,6 +654,7 @@ class _PlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> click([MediaButton button = MediaButton.media]) async {
+    debugPrint('[diag] media button: click $button playing=$_playing');
     final now = DateTime.now();
     final window = button == MediaButton.media
         ? const Duration(milliseconds: 500)
@@ -688,6 +691,9 @@ class _PlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> play() async {
+    debugPrint(
+        '[diag] media button: play appInitiated=$_appInitiatedPlay '
+        'playing=$_playing state=${_justAudioEvent.processingState}');
     // 同上：车机在 pause 之后自动补发的 play 不应顶掉暂停；
     // App 自己发起的播放（UI/切歌/自动连播）不受影响。
     if (!_appInitiatedPlay && _pausedRecently(DateTime.now())) return;

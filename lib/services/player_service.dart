@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,11 +80,25 @@ class PlayerService {
   /// 持久化的旧链接直接播会失败）；main 里注入，默认空 = 旧行为
   UrlRefresher? urlRefresher;
 
-  /// 恢复播放正在换新链接（UI 可显示等待状态）
+  /// 队列链接的保守有效期：vkey 链接约数小时失效，超过 3 小时即视为过期
+  static const _urlMaxAge = Duration(hours: 3);
+
+  /// 队列链接最近一次获取/确认的时间（随队列持久化）
+  DateTime? _urlsFetchedAt;
+
+  /// 播放准备（换链接 + 重建队列源）的并发锁：多个入口同时点只做一次
+  Future<bool>? _prepareFuture;
+
+  /// 正在换新链接（UI 可显示等待状态）
   bool _restoring = false;
 
-  /// 上一次恢复播放时是否发现登录态过期（UI 读后引导重登）
-  bool _lastRestoreAuthExpired = false;
+  /// 上一次换链接时是否发现登录态过期（UI 读后引导重登）
+  bool _lastRefreshAuthExpired = false;
+
+  /// 队列链接是否已过期（缺失时间视为过期，保守处理）
+  bool get _urlsStale =>
+      _urlsFetchedAt == null ||
+      DateTime.now().difference(_urlsFetchedAt!) > _urlMaxAge;
 
   /// 任何会影响 UI 的状态变化后触发（含恢复完成）
   final _changes = StreamController<void>.broadcast();
@@ -95,11 +110,11 @@ class PlayerService {
   int get queueLength => _queue.length;
   PlayMode get mode => _mode;
 
-  /// 恢复播放正在换新链接（UI 显示等待状态）
+  /// 正在换新链接（UI 显示等待状态）
   bool get restoring => _restoring;
 
-  /// 上一次恢复播放时是否发现登录态过期（UI 读后引导重登）
-  bool get lastRestoreAuthExpired => _lastRestoreAuthExpired;
+  /// 上一次换链接时是否发现登录态过期（UI 读后引导重登）
+  bool get lastRefreshAuthExpired => _lastRefreshAuthExpired;
 
   String? get currentTitle => _titles.isEmpty
       ? null
@@ -162,6 +177,8 @@ class PlayerService {
     _index = startIndex.clamp(0, urls.length - 1);
     // 新队列一律从头播：不携带重启恢复出的旧进度
     _savedPosition = Duration.zero;
+    // 刚取到的链接，记下确认时间
+    _urlsFetchedAt = DateTime.now();
     await _buildAndLoad(_index, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -180,6 +197,7 @@ class PlayerService {
     _covers = [cover ?? ''];
     _index = 0;
     _savedPosition = Duration.zero;
+    _urlsFetchedAt = DateTime.now();
     await _buildAndLoad(0, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -222,43 +240,79 @@ class PlayerService {
   }
 
   Future<void> resume() async {
-    // 恢复的队列尚未加载音频源；持久化的 vkey 链接数小时即失效，
-    // 先按 mid 整队换新链接再加载（近期播过的由 client 缓存秒回）
-    if (_restoredPending && _queue.isNotEmpty) {
-      await _refreshRestoredUrls();
-      await _buildAndLoad(_index, autoplay: true);
-      // 恢复出的进度只在这一步使用一次
-      _savedPosition = Duration.zero;
-      return;
-    }
+    if (_queue.isEmpty) return;
+    if (!await _prepareForPlayback()) return;
     _player.play();
   }
 
-  /// 恢复播放前把队列里的旧 vkey 链接批量换成新的。
+  /// 任何播放操作前的统一准备（播放键 / 播放列表点选 / 上一首 / 下一首）：
+  /// - 恢复的队列尚未加载音频源 → 先加载
+  /// - 队列链接已过期（间隔数小时/数天再点）→ 换新链接并重建队列源
+  /// 并发调用共享同一次准备，避免并发 setAudioSource。
+  Future<bool> _prepareForPlayback() {
+    final existing = _prepareFuture;
+    if (existing != null) return existing;
+    final f = _doPrepareForPlayback();
+    _prepareFuture = f;
+    f.whenComplete(() {
+      if (identical(_prepareFuture, f)) _prepareFuture = null;
+    });
+    return f;
+  }
+
+  Future<bool> _doPrepareForPlayback() async {
+    if (_queue.isEmpty) return false;
+    try {
+      final restored = _restoredPending;
+      // 运行态且链接新鲜：队列源已就绪，直接播
+      if (!restored && _playlist != null && !_urlsStale) return true;
+      if (_urlsStale) {
+        await _refreshQueueUrls();
+      }
+      // 重建队列源：恢复态沿用持久化进度，运行态沿用当前播放位置
+      if (!restored) _savedPosition = _player.position;
+      await _buildAndLoad(_index, autoplay: false);
+      _savedPosition = Duration.zero;
+      return _playlist != null;
+    } catch (e) {
+      // 准备失败（如并发加载冲突）不抛出：保持队列源原状，
+      // 由后续播放失败暴露问题，避免依赖它的 UI 操作被中断
+      debugPrint('[diag] prepare playback failed: $e');
+      return _playlist != null;
+    }
+  }
+
+  /// 把队列里的旧 vkey 链接批量换成新的。
   /// 回调未注入 / 队列无 mid（旧版本持久化的数据）/ 回调失败时，
   /// 保留旧链接按原行为播放（可能播不了，与旧行为一致）。
-  Future<void> _refreshRestoredUrls() async {
+  Future<void> _refreshQueueUrls() async {
     final refresher = urlRefresher;
     final hasMids =
         _mids.length == _queue.length && _mids.any((m) => m.isNotEmpty);
     if (refresher == null || !hasMids) return;
     _restoring = true;
-    _lastRestoreAuthExpired = false;
+    _lastRefreshAuthExpired = false;
     _notify();
     try {
       final result = await refresher(_mids);
       if (result == null) return;
-      _lastRestoreAuthExpired = result.authExpired;
-      var changed = false;
+      _lastRefreshAuthExpired = result.authExpired;
+      var changed = 0;
       for (var i = 0; i < _queue.length && i < result.urls.length; i++) {
         final u = result.urls[i];
         if (u != null && u.isNotEmpty && u != _queue[i]) {
           _queue[i] = u;
-          changed = true;
+          changed++;
         }
       }
-      // 换新后的链接落盘，下次恢复不需要再换
-      if (changed) unawaited(_persistQueue());
+      // 即使链接未变（缓存命中）也记为刚确认过，避免每次操作都重取
+      _urlsFetchedAt = DateTime.now();
+      debugPrint(
+        '[diag] queue urls refreshed total=${_queue.length} changed=$changed '
+        'authExpired=${result.authExpired}',
+      );
+      // 新链接落盘，下次恢复直接可用
+      unawaited(_persistQueue());
     } catch (_) {
       // 换链接失败不影响原流程：保留旧链接尝试播放
     } finally {
@@ -288,6 +342,7 @@ class PlayerService {
 
   Future<void> next() async {
     if (_queue.isEmpty) return;
+    if (!await _prepareForPlayback()) return;
     switch (_mode) {
       case PlayMode.shuffle:
         if (_queue.length > 1) {
@@ -318,6 +373,7 @@ class PlayerService {
 
   Future<void> previous() async {
     if (_queue.isEmpty) return;
+    if (!await _prepareForPlayback()) return;
     if (_index > 0) {
       await _player.seekToPrevious();
     } else if (_mode == PlayMode.listLoop) {
@@ -329,7 +385,9 @@ class PlayerService {
   Future<void> playIndex(int i) async => _playIndex(i);
 
   Future<void> _playIndex(int i) async {
-    if (i < 0 || i >= _queue.length || _playlist == null) return;
+    if (i < 0 || i >= _queue.length) return;
+    // 播放列表点选同样要准备：冷启动恢复的队列此时尚未加载
+    if (!await _prepareForPlayback()) return;
     await _player.seek(Duration.zero, index: i);
     _index = i;
     _player.play();
@@ -371,6 +429,7 @@ class PlayerService {
     _index = 0;
     _playlist = null;
     _restoredPending = false;
+    _urlsFetchedAt = null;
     _savedPosition = Duration.zero;
     await stop();
     unawaited(_persistQueue());
@@ -395,6 +454,10 @@ class PlayerService {
     await prefs.setStringList('player_titles', _titles);
     await prefs.setStringList('player_covers', _covers);
     await prefs.setInt('player_index', _index);
+    await prefs.setInt(
+      'player_urls_ts',
+      _urlsFetchedAt?.millisecondsSinceEpoch ?? 0,
+    );
   }
 
   Future<void> _persistPosition() async {
@@ -433,7 +496,17 @@ class PlayerService {
         _index = idx.clamp(0, urls.length - 1);
         _savedPosition =
             Duration(milliseconds: prefs.getInt('player_position') ?? 0);
+        final ts = prefs.getInt('player_urls_ts') ?? 0;
+        _urlsFetchedAt =
+            ts > 0 ? DateTime.fromMillisecondsSinceEpoch(ts) : null;
         _restoredPending = true;
+        // 启动即预加载恢复队列（换新链接 + 加载音频源，不播放）：
+        // 1) 媒体会话进入 ready 并激活——车机方控/方向盘媒体键只会路由
+        //    给 active 的 MediaSession（冷启动未播放时原实现不激活，
+        //    表现为「车机启动后方向盘控制失效」，见 audio_service 补丁）；
+        // 2) 方向盘「播放」键由 just_audio_background 直接驱动底层播放器，
+        //    源已就绪、链接已刷新，按下即可出声。
+        unawaited(_prepareForPlayback());
       }
     } catch (_) {
       // 恢复失败不影响使用

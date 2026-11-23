@@ -24,9 +24,9 @@ class PlayerPage extends ConsumerStatefulWidget {
 
 class _PlayerPageState extends ConsumerState<PlayerPage>
     with SingleTickerProviderStateMixin {
-  /// 恢复队列播放时若发现登录态过期（换不到新链接），引导重新登录
+  /// 换新链接时若发现登录态过期，引导重新登录
   Future<void> _maybePromptRelogin() async {
-    if (!ref.read(playerServiceProvider).lastRestoreAuthExpired) return;
+    if (!ref.read(playerServiceProvider).lastRefreshAuthExpired) return;
     final relogin = await showAppConfirmDialog(
       context,
       title: '登录已过期',
