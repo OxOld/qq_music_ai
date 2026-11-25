@@ -447,7 +447,7 @@ class MinePageState extends ConsumerState<MinePage> {
                             _MenuRow(
                               icon: Icons.settings_rounded,
                               label: '设置',
-                              subtitle: '主题色 · AI 服务 · 后台播放 · 应用更新',
+                              subtitle: 'AI 服务与提示词 · 主题色 · 后台播放 · 应用更新',
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(

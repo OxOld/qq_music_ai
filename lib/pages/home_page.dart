@@ -63,6 +63,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       _goToSettings();
       return;
     }
+    // 提示词前缀可在设置页自定义，读取失败时按默认处理
+    final prompts = await ref.read(promptConfigProvider.future);
 
     setState(() {
       _loading = true;
@@ -75,7 +77,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       final playlist = await ref
           .read(llmServiceProvider)
-          .generatePlaylist(config, input);
+          .generatePlaylist(
+            config,
+            input,
+            promptPrefix: prompts.resolvedGeneratePrefix,
+          );
       if (!mounted) return;
       setState(() => _playlist = playlist);
     } catch (e) {
@@ -239,7 +245,12 @@ class _HomePageState extends ConsumerState<HomePage> {
         final url = await client.getPlayUrl(auth, song.mid);
         await ref
             .read(playerServiceProvider)
-            .playUrl(url, mid: song.mid, title: song.name, cover: song.coverUrl);
+            .playUrl(
+              url,
+              mid: song.mid,
+              title: song.name,
+              cover: song.coverUrl,
+            );
       } on QQMusicAuthExpiredException {
         // 登录态过期：先静默续期一次，仍失败再引导重新登录
         await ref.read(qqAuthProvider.notifier).refresh();
@@ -247,7 +258,12 @@ class _HomePageState extends ConsumerState<HomePage> {
         final url = await client.getPlayUrl(auth, song.mid);
         await ref
             .read(playerServiceProvider)
-            .playUrl(url, mid: song.mid, title: song.name, cover: song.coverUrl);
+            .playUrl(
+              url,
+              mid: song.mid,
+              title: song.name,
+              cover: song.coverUrl,
+            );
       }
     } on QQMusicAuthExpiredException {
       if (!mounted) return;
@@ -321,7 +337,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         final relogin = await showAppConfirmDialog(
           context,
           title: '未能获取播放链接',
-          message: '可能登录态已过期（列表正常但 VIP 歌曲取不到链接）。\n'
+          message:
+              '可能登录态已过期（列表正常但 VIP 歌曲取不到链接）。\n'
               '重新扫码登录后即可恢复。',
           confirmLabel: '重新登录',
           icon: Icons.login_rounded,

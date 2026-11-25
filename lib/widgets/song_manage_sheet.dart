@@ -79,6 +79,8 @@ class _SongManageSheetState extends ConsumerState<_SongManageSheet> {
         });
         return;
       }
+      // 提示词前缀可在设置页自定义，读取失败时按默认处理
+      final prompts = await ref.read(promptConfigProvider.future);
       final suggestions = await ref
           .read(llmServiceProvider)
           .suggestSongsForPlaylist(
@@ -88,6 +90,7 @@ class _SongManageSheetState extends ConsumerState<_SongManageSheet> {
                 .map((s) => Song(name: s.name, artist: s.artist))
                 .toList(),
             exclude: _suggestions.map((s) => s.name).toList(),
+            promptPrefix: prompts.resolvedSuggestPrefix,
           );
       if (!mounted) return;
       setState(() {

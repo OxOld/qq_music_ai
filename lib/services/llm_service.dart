@@ -7,10 +7,12 @@ import 'settings_service.dart';
 
 /// LLM 调用服务（OpenAI 兼容协议，直连无后端）
 class LlmService {
-  static const _systemPrompt = '''
-你是一位专业的音乐策展人。请根据用户描述的场景、情绪、曲风、语言、年代等需求，生成一份精选歌单。
-
-必须严格只返回一个 JSON 对象，不要包含任何 JSON 之外的文字、解释、markdown 代码块标记（不要用 ``` 包裹）。JSON 结构如下：
+  /// 歌单生成的固定规则段
+  ///
+  /// 由代码维护（JSON 结构与字段规范），调用时拼在用户可编辑前缀之后；
+  /// 用户在设置页只能改前缀，无法破坏这里的解析格式。
+  static const generateFixedTail =
+      '''必须严格只返回一个 JSON 对象，不要包含任何 JSON 之外的文字、解释、markdown 代码块标记（不要用 ``` 包裹）。JSON 结构如下：
 {
   "title": "歌单标题（简洁、有吸引力）",
   "description": "一句话描述歌单风格",
@@ -26,10 +28,9 @@ class LlmService {
 4. 避免过于小众或已下架的歌曲。
 ''';
 
-  static const _suggestSystemPrompt = '''
-你是一位专业的音乐策展人。用户会给出一份已有歌单的名称与全部歌曲，请为这份歌单推荐一批"还没有收录"的新歌：延续歌单的整体风格、情绪与年代，与已有歌曲互补而不重复。
-
-必须严格只返回一个 JSON 对象，不要包含任何 JSON 之外的文字、解释、markdown 代码块标记（不要用 ``` 包裹）。JSON 结构如下：
+  /// 补歌推荐的固定规则段（同上，由代码维护）
+  static const suggestFixedTail =
+      '''必须严格只返回一个 JSON 对象，不要包含任何 JSON 之外的文字、解释、markdown 代码块标记（不要用 ``` 包裹）。JSON 结构如下：
 {
   "songs": [
     {"name": "歌曲名", "artist": "歌手名"}
@@ -44,8 +45,21 @@ class LlmService {
 5. 避免过于小众或已下架的歌曲。
 ''';
 
+  /// 拼接 system 提示词：可编辑前缀（空则忽略）+ 固定规则段
+  static String composeSystemPrompt(String? prefix, String fixedTail) {
+    final editable = (prefix ?? '').trim();
+    return editable.isEmpty ? fixedTail : '$editable\n\n$fixedTail';
+  }
+
   /// 根据用户输入生成歌单
-  Future<Playlist> generatePlaylist(LlmConfig config, String userInput) async {
+  ///
+  /// [promptPrefix] 为设置页配置的可编辑前缀（角色/风格/额外要求），
+  /// 为空时只用固定规则段。
+  Future<Playlist> generatePlaylist(
+    LlmConfig config,
+    String userInput, {
+    String? promptPrefix,
+  }) async {
     final base = config.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/chat/completions');
 
@@ -59,7 +73,10 @@ class LlmService {
           body: jsonEncode({
             'model': config.model.trim(),
             'messages': [
-              {'role': 'system', 'content': _systemPrompt},
+              {
+                'role': 'system',
+                'content': composeSystemPrompt(promptPrefix, generateFixedTail),
+              },
               {'role': 'user', 'content': userInput.trim()},
             ],
             'response_format': {'type': 'json_object'},
@@ -93,13 +110,15 @@ class LlmService {
   }
 
   /// 根据现有歌单推荐一批未收录的新歌（风格延续、不与已有歌曲重复）。
-  /// [exclude] 为上一批已推荐过的歌名，用于「换一批」时排除
+  /// [exclude] 为上一批已推荐过的歌名，用于「换一批」时排除；
+  /// [promptPrefix] 为设置页配置的可编辑前缀（空则只用固定规则段）
   Future<List<Song>> suggestSongsForPlaylist(
     LlmConfig config, {
     required String playlistName,
     required List<Song> existing,
     int count = 10,
     List<String> exclude = const [],
+    String? promptPrefix,
   }) async {
     final base = config.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/chat/completions');
@@ -125,7 +144,10 @@ class LlmService {
           body: jsonEncode({
             'model': config.model.trim(),
             'messages': [
-              {'role': 'system', 'content': _suggestSystemPrompt},
+              {
+                'role': 'system',
+                'content': composeSystemPrompt(promptPrefix, suggestFixedTail),
+              },
               {'role': 'user', 'content': userInput},
             ],
             'response_format': {'type': 'json_object'},

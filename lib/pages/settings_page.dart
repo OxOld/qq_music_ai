@@ -9,6 +9,8 @@ import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/app_update.dart';
+import '../widgets/gradient_button.dart';
+import 'prompt_settings_page.dart';
 
 /// 设置页：配置 LLM（base_url / api_key / model）
 class SettingsPage extends ConsumerStatefulWidget {
@@ -28,11 +30,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   String _version = ''; // 当前应用版本（异步取）
   bool _checkingUpdate = false;
   bool _batteryIgnoring = true; // 省电策略是否已豁免（异步取，先按已允许渲染）
+  int _promptCustomCount = 0; // 自定义提示词数量（0~2）
 
   @override
   void initState() {
     super.initState();
     _loadConfig();
+    _loadPrompts();
     _loadVersion();
     _loadBatteryState();
     // 从系统授权弹窗返回时刷新豁免状态
@@ -95,6 +99,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     setState(() {});
   }
 
+  /// 读取提示词自定义数量（入口卡片显示状态）
+  Future<void> _loadPrompts() async {
+    final config = await ref.read(promptServiceProvider).load();
+    if (!mounted) return;
+    setState(() {
+      _promptCustomCount =
+          (config.generateIsCustom ? 1 : 0) + (config.suggestIsCustom ? 1 : 0);
+    });
+  }
+
+  /// 进入提示词编辑子页，返回后刷新状态
+  Future<void> _openPromptSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PromptSettingsPage()));
+    if (mounted) _loadPrompts();
+  }
+
   Future<void> _save() async {
     final config = LlmConfig(
       baseUrl: _baseUrlController.text.trim(),
@@ -134,257 +156,282 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           backgroundColor: AppColors.bg,
           scrolledUnderElevation: 0,
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            // ---------- 投屏诊断（车机排查窗口方向/比例用） ----------
-            // 非 const：主题切换时重建（const 实例会被复用，品牌色小图标不刷新）
-            _DisplayDiagCard(),
-            SizedBox(height: 12),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              children: [
+                const _SectionLabel('AI'),
 
-            // ---------- 主题色 ----------
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-              decoration: AppColors.card(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                // ---------- 配置卡片 ----------
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                  decoration: AppColors.card(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.palette_rounded,
-                        color: AppColors.brand,
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '主题色',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '全局生效，重启后保持',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  SizedBox(height: 14),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 12,
-                    children: [
-                      for (final p in kThemePresets)
-                        _ThemeSwatch(
-                          preset: p,
-                          selected: p.id == AppColors.preset.id,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 12),
-
-            // ---------- 配置卡片 ----------
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-              decoration: AppColors.card(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.smart_toy_rounded,
-                        color: AppColors.brand,
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'AI 服务配置',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '兼容 OpenAI 协议的服务均可接入',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _FieldLabel(icon: Icons.link_rounded, text: '服务地址'),
-                  TextField(
-                    controller: _baseUrlController,
-                    style: const TextStyle(fontSize: 13.5),
-                    decoration: const InputDecoration(
-                      hintText: 'https://api.deepseek.com/v1',
-                    ),
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  _FieldLabel(icon: Icons.key_rounded, text: 'API Key'),
-                  TextField(
-                    controller: _apiKeyController,
-                    obscureText: true,
-                    style: const TextStyle(fontSize: 13.5),
-                    decoration: const InputDecoration(hintText: 'sk-…'),
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  _FieldLabel(icon: Icons.memory_rounded, text: '模型名称'),
-                  TextField(
-                    controller: _modelController,
-                    style: const TextStyle(fontSize: 13.5),
-                    decoration: const InputDecoration(
-                      hintText: 'deepseek-flash',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 保存按钮收进卡片内，与「应用更新」卡片结构一致
-                  _SaveButton(saving: _saving, onSave: _save),
-                  const SizedBox(height: 12),
-                  // 支持服务与 Key 安全说明（AI 配置的附注）
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandSoft.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.shield_rounded,
-                          color: AppColors.brandDeep,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
-                            'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy_rounded,
+                            color: AppColors.brand,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'AI 服务配置',
                             style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.textSecondary,
-                              height: 1.5,
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // ---------- 后台播放 ----------
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              decoration: AppColors.card(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.bolt_rounded,
-                        color: AppColors.brand,
-                        size: 20,
+                        ],
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(height: 4),
                       const Text(
-                        '后台播放',
+                        '兼容 OpenAI 协议的服务均可接入',
                         style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        _batteryIgnoring ? '已允许后台运行' : '未开启',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _batteryIgnoring
-                              ? AppColors.success
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '熄屏连续播放需要加入电池优化豁免（省电策略「不限制」）',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (!_batteryIgnoring) ...[
-                    const SizedBox(height: 12),
-                    _BatteryButton(onTap: _requestBatteryIgnore),
-                  ],
-                ],
-              ),
-            ),
-            // ---------- 应用更新 ----------
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              decoration: AppColors.card(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.system_update_alt_rounded,
-                        color: AppColors.brand,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        '应用更新',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        _version.isEmpty ? '当前版本 …' : '当前版本 v$_version',
-                        style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           color: AppColors.textSecondary,
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      _FieldLabel(icon: Icons.link_rounded, text: '服务地址'),
+                      TextField(
+                        controller: _baseUrlController,
+                        style: const TextStyle(fontSize: 13.5),
+                        decoration: const InputDecoration(
+                          hintText: 'https://api.deepseek.com/v1',
+                        ),
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      _FieldLabel(icon: Icons.key_rounded, text: 'API Key'),
+                      TextField(
+                        controller: _apiKeyController,
+                        obscureText: true,
+                        style: const TextStyle(fontSize: 13.5),
+                        decoration: const InputDecoration(hintText: 'sk-…'),
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      _FieldLabel(icon: Icons.memory_rounded, text: '模型名称'),
+                      TextField(
+                        controller: _modelController,
+                        style: const TextStyle(fontSize: 13.5),
+                        decoration: const InputDecoration(
+                          hintText: 'deepseek-flash',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // 保存按钮收进卡片内，与「应用更新」卡片结构一致
+                      GradientButton(
+                        label: '保存配置',
+                        loadingLabel: '保存中…',
+                        icon: Icons.save_rounded,
+                        loading: _saving,
+                        onTap: _save,
+                      ),
+                      const SizedBox(height: 12),
+                      // 支持服务与 Key 安全说明（AI 配置的附注）
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandSoft.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.shield_rounded,
+                              color: AppColors.brandDeep,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '支持 DeepSeek、Kimi、智谱 GLM、通义 Qwen、GPT-4o 等。'
+                                'Key 仅保存在本机安全存储中，直连对应服务，不经任何中间服务器。',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.textSecondary,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _CheckUpdateButton(
-                    checking: _checkingUpdate,
-                    onTap: _checkUpdate,
+                ),
+                const SizedBox(height: 12),
+                _PromptEntryCard(
+                  customCount: _promptCustomCount,
+                  onTap: _openPromptSettings,
+                ),
+                const _SectionLabel('外观'),
+
+                // ---------- 主题色 ----------
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                  decoration: AppColors.card(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.palette_rounded,
+                            color: AppColors.brand,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '主题色',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '全局生效，重启后保持',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 14),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 12,
+                        children: [
+                          for (final p in kThemePresets)
+                            _ThemeSwatch(
+                              preset: p,
+                              selected: p.id == AppColors.preset.id,
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const _SectionLabel('播放'),
+                // ---------- 后台播放 ----------
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  decoration: AppColors.card(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.bolt_rounded,
+                            color: AppColors.brand,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '后台播放',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _batteryIgnoring ? '已允许后台运行' : '未开启',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _batteryIgnoring
+                                  ? AppColors.success
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '熄屏连续播放需要加入电池优化豁免（省电策略「不限制」）',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      if (!_batteryIgnoring) ...[
+                        const SizedBox(height: 12),
+                        GradientButton(
+                          label: '设置为不限制',
+                          icon: Icons.bolt_rounded,
+                          verticalPadding: 12,
+                          onTap: _requestBatteryIgnore,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const _SectionLabel('应用'),
+                // ---------- 应用更新 ----------
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  decoration: AppColors.card(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.system_update_alt_rounded,
+                            color: AppColors.brand,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '应用更新',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _version.isEmpty ? '当前版本 …' : '当前版本 v$_version',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      GradientButton(
+                        label: '检查更新',
+                        loadingLabel: '检查中…',
+                        icon: Icons.manage_search_rounded,
+                        loading: _checkingUpdate,
+                        verticalPadding: 12,
+                        onTap: _checkUpdate,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const _SectionLabel('诊断'),
+                _DisplayDiagCard(),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -482,171 +529,92 @@ class _FieldLabel extends StatelessWidget {
   }
 }
 
-class _SaveButton extends StatelessWidget {
-  final bool saving;
-  final VoidCallback onSave;
+/// 设置分组标题
+class _SectionLabel extends StatelessWidget {
+  final String text;
 
-  const _SaveButton({required this.saving, required this.onSave});
+  const _SectionLabel(this.text);
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brand.withValues(alpha: 0.35),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: saving ? null : onSave,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (saving)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      color: Colors.white,
-                    ),
-                  )
-                else
-                  const Icon(Icons.save_rounded, size: 19, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  saving ? '保存中…' : '保存配置',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textSecondary,
+          letterSpacing: 0.8,
         ),
       ),
     );
   }
 }
 
-/// 后台播放设置按钮（品牌渐变胶囊，同检查更新按钮风格）
-class _BatteryButton extends StatelessWidget {
+/// AI 提示词入口卡片（点击进入编辑子页）
+class _PromptEntryCard extends StatelessWidget {
+  final int customCount;
   final VoidCallback onTap;
 
-  const _BatteryButton({required this.onTap});
+  const _PromptEntryCard({required this.customCount, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brand.withValues(alpha: 0.35),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
+    final status = customCount == 0 ? '两套均使用默认提示词' : '已自定义 $customCount/2 套提示词';
+    return Container(
+      decoration: AppColors.card(),
       child: Material(
         color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.bolt_rounded, size: 19, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  '设置为不限制',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoft,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(
+                    Icons.edit_note_rounded,
+                    color: AppColors.brandDeep,
+                    size: 22,
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 检查更新按钮（品牌渐变胶囊，同保存按钮风格）
-class _CheckUpdateButton extends StatelessWidget {
-  final bool checking;
-  final VoidCallback onTap;
-
-  const _CheckUpdateButton({required this.checking, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brand.withValues(alpha: 0.35),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: checking ? null : onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (checking)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      color: Colors.white,
-                    ),
-                  )
-                else
-                  const Icon(
-                    Icons.manage_search_rounded,
-                    size: 19,
-                    color: Colors.white,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AI 提示词',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        status,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                const SizedBox(width: 8),
-                Text(
-                  checking ? '检查中…' : '检查更新',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                  size: 22,
                 ),
               ],
             ),
@@ -715,70 +683,120 @@ class _DisplayDiagCardState extends State<_DisplayDiagCard> {
     if (context.mounted) AppToast.show(context, '诊断信息已复制', success: true);
   }
 
+  /// 是否展开诊断详情（默认收起，避免开发者信息占满设置页）
+  bool _expanded = false;
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final info = _info;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       decoration: AppColors.card(),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.cast_rounded, color: AppColors.brand, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                '投屏诊断',
-                style: TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+          // 折叠标题：点整行展开/收起
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 15, 12, 15),
+                child: Row(
+                  children: [
+                    Icon(Icons.cast_rounded, color: AppColors.brand, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '投屏诊断',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      _expanded ? '收起' : '展开',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      color: AppColors.textSecondary,
+                      size: 22,
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => _copy(context),
-                icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('复制', style: TextStyle(fontSize: 12.5)),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '车机投屏异常时把以下参数发给开发者',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _copy(context),
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text(
+                          '复制',
+                          style: TextStyle(fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  if (_error != null)
+                    Text(
+                      '读取失败：$_error',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.danger,
+                      ),
+                    )
+                  else if (info == null)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else ...[
+                    _diagRow(
+                      'Flutter 窗口',
+                      '${mq.size.width.toStringAsFixed(0)}×${mq.size.height.toStringAsFixed(0)} dp · ${mq.orientation.name} · dpr ${mq.devicePixelRatio.toStringAsFixed(2)}',
+                    ),
+                    _diagRow(
+                      '显示器',
+                      'id=${info['displayId']} rotation=${info['rotation']} '
+                          '${info['widthPx']}×${info['heightPx']}px @${info['densityDpi']}dpi',
+                    ),
+                    _diagRow(
+                      '系统配置',
+                      'orientation=${info['configOrientation']} '
+                          '${info['configWidthDp']}×${info['configHeightDp']}dp '
+                          '@${info['configDensityDpi']}dpi',
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '车机投屏异常时把以下参数发给开发者（点复制）',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          if (_error != null)
-            Text(
-              '读取失败：$_error',
-              style: const TextStyle(fontSize: 12, color: AppColors.danger),
-            )
-          else if (info == null)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else ...[
-            _diagRow(
-              'Flutter 窗口',
-              '${mq.size.width.toStringAsFixed(0)}×${mq.size.height.toStringAsFixed(0)} dp · ${mq.orientation.name} · dpr ${mq.devicePixelRatio.toStringAsFixed(2)}',
             ),
-            _diagRow(
-              '显示器',
-              'id=${info['displayId']} rotation=${info['rotation']} '
-                  '${info['widthPx']}×${info['heightPx']}px @${info['densityDpi']}dpi',
-            ),
-            _diagRow(
-              '系统配置',
-              'orientation=${info['configOrientation']} '
-                  '${info['configWidthDp']}×${info['configHeightDp']}dp '
-                  '@${info['configDensityDpi']}dpi',
-            ),
-          ],
         ],
       ),
     );

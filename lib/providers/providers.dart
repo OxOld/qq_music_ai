@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/llm_service.dart';
 import '../services/match_service.dart';
 import '../services/player_service.dart';
+import '../services/prompt_service.dart';
 import '../services/qq_auth_service.dart';
 import '../services/qq_music_client.dart';
 import '../services/settings_service.dart';
@@ -42,6 +43,17 @@ final playerServiceProvider = Provider<PlayerService>((ref) {
 /// 当前 LLM 配置（异步加载，可刷新）
 final llmConfigProvider = FutureProvider<LlmConfig>((ref) async {
   final service = ref.watch(settingsServiceProvider);
+  return service.load();
+});
+
+/// AI 提示词服务（可编辑前缀，与固定规则段运行时拼接）
+final promptServiceProvider = Provider<PromptService>((ref) {
+  return PromptService();
+});
+
+/// 当前提示词配置（异步加载，保存后 invalidate 刷新）
+final promptConfigProvider = FutureProvider<PromptConfig>((ref) async {
+  final service = ref.watch(promptServiceProvider);
   return service.load();
 });
 
@@ -112,8 +124,9 @@ class QQAuthNotifier extends StateNotifier<QQAuthState> {
   }
 }
 
-final qqAuthProvider =
-    StateNotifierProvider<QQAuthNotifier, QQAuthState>((ref) {
+final qqAuthProvider = StateNotifierProvider<QQAuthNotifier, QQAuthState>((
+  ref,
+) {
   return QQAuthNotifier(
     ref.watch(qqAuthServiceProvider),
     client: ref.watch(qqMusicClientProvider),
