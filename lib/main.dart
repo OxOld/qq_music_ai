@@ -32,20 +32,33 @@ Future<void> main() async {
     final client = _container.read(qqMusicClientProvider);
     final auth = _container.read(qqAuthProvider);
     final out = List<String?>.filled(mids.length, null);
-    var authExpired = false;
+    var ok = 0;
+    var authFailed = 0;
     var cursor = 0;
     Future<void> worker() async {
       while (cursor < mids.length) {
         final i = cursor++;
         try {
-          out[i] = await client.getPlayUrl(auth, mids[i]);
+          final url = await client.getPlayUrl(auth, mids[i]);
+          if (url.isNotEmpty) {
+            out[i] = url;
+            ok++;
+          }
         } on QQMusicAuthExpiredException {
-          authExpired = true;
+          authFailed++;
         } catch (_) {}
       }
     }
 
     await Future.wait([worker(), worker(), worker()]);
+    // 只有「全部失败且全是登录态异常」才算登录过期：单曲无版权/需会员
+    // 也会抛同一异常，若按「任意一首异常」判定，队列里有一首播不了就会
+    // 误报登录过期——表现为能正常播放却反复弹「重新登录」。
+    final authExpired = ok == 0 && authFailed > 0;
+    debugPrint(
+      '[diag] refresh urls total=${mids.length} ok=$ok '
+      'authFailed=$authFailed authExpired=$authExpired',
+    );
     return UrlRefreshResult(out, authExpired: authExpired);
   };
   runApp(

@@ -80,9 +80,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     );
   }
 
-  /// 换新链接时若发现登录态过期，引导重新登录
+  /// 换新链接时若发现登录态过期，引导重新登录。
+  /// 仅在「尝试开始播放」时由调用方触发（暂停不提示）；
+  /// 弹过一次即消费标记，避免暂停/播放反复弹窗（下次换链失败会重新置位）。
   Future<void> _maybePromptRelogin() async {
-    if (!ref.read(playerServiceProvider).lastRefreshAuthExpired) return;
+    final service = ref.read(playerServiceProvider);
+    if (!service.lastRefreshAuthExpired) return;
     final relogin = await showAppConfirmDialog(
       context,
       title: '登录已过期',
@@ -90,6 +93,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
       confirmLabel: '重新登录',
       icon: Icons.login_rounded,
     );
+    service.acknowledgeAuthExpired();
     if (relogin && mounted) {
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const LoginPage()),
@@ -199,9 +203,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(999),
                     onTap: () async {
+                      final wasPlaying = service.playing;
                       await service.toggle();
                       if (mounted) setState(() => _playing = service.playing);
-                      await _maybePromptRelogin();
+                      // 暂停不应弹重登提示；只有尝试开始播放时才检查
+                      if (!wasPlaying) await _maybePromptRelogin();
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(7),

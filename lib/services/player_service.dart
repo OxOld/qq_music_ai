@@ -95,6 +95,11 @@ class PlayerService {
   /// 上一次换链接时是否发现登录态过期（UI 读后引导重登）
   bool _lastRefreshAuthExpired = false;
 
+  /// 队列代次：换新队列 / 增删曲目时自增。换链接是异步的，回来时如果
+  /// 队列已被替换，旧结果必须整体丢弃——否则旧队列的链接会写进新队列、
+  /// 旧队列的「登录过期」也会误置到能正常播放的新队列上（反复弹重登）。
+  int _queueGeneration = 0;
+
   /// 队列链接是否已过期（缺失时间视为过期，保守处理）
   bool get _urlsStale =>
       _urlsFetchedAt == null ||
@@ -166,6 +171,7 @@ class PlayerService {
     List<String> covers = const [],
     int startIndex = 0,
   }) async {
+    _queueGeneration++;
     _queue = urls;
     _mids = mids.length == urls.length ? mids : List.filled(urls.length, '');
     _titles = titles.length == urls.length
@@ -177,8 +183,10 @@ class PlayerService {
     _index = startIndex.clamp(0, urls.length - 1);
     // 新队列一律从头播：不携带重启恢复出的旧进度
     _savedPosition = Duration.zero;
-    // 刚取到的链接，记下确认时间
+    // 刚取到的链接，记下确认时间；能取到链接说明登录态有效，
+    // 顺带清掉历史误报的过期标记（否则暂停/播放会一直弹重登）
     _urlsFetchedAt = DateTime.now();
+    _lastRefreshAuthExpired = false;
     await _buildAndLoad(_index, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -191,6 +199,7 @@ class PlayerService {
     String? title,
     String? cover,
   }) async {
+    _queueGeneration++;
     _queue = [url];
     _mids = [mid ?? ''];
     _titles = [title ?? ''];
@@ -198,6 +207,7 @@ class PlayerService {
     _index = 0;
     _savedPosition = Duration.zero;
     _urlsFetchedAt = DateTime.now();
+    _lastRefreshAuthExpired = false;
     await _buildAndLoad(0, autoplay: true);
     unawaited(_persistQueue());
     _notify();
@@ -262,13 +272,17 @@ class PlayerService {
 
   Future<bool> _doPrepareForPlayback() async {
     if (_queue.isEmpty) return false;
+    final gen = _queueGeneration;
     try {
       final restored = _restoredPending;
       // 运行态且链接新鲜：队列源已就绪，直接播
       if (!restored && _playlist != null && !_urlsStale) return true;
       if (_urlsStale) {
         await _refreshQueueUrls();
+        // 换链期间用户换了歌单/增删曲目：交给新队列自己的流程
+        if (gen != _queueGeneration) return _playlist != null;
       }
+      if (gen != _queueGeneration) return _playlist != null;
       // 重建队列源：恢复态沿用持久化进度，运行态沿用当前播放位置
       if (!restored) _savedPosition = _player.position;
       await _buildAndLoad(_index, autoplay: false);
@@ -287,29 +301,45 @@ class PlayerService {
   /// 保留旧链接按原行为播放（可能播不了，与旧行为一致）。
   Future<void> _refreshQueueUrls() async {
     final refresher = urlRefresher;
+    if (refresher == null) return;
     final hasMids =
         _mids.length == _queue.length && _mids.any((m) => m.isNotEmpty);
-    if (refresher == null || !hasMids) return;
+    if (!hasMids) {
+      // 旧版本持久化的队列没有 mid，本来就换不了链接：记为已确认，
+      // 避免每次点播放都重建一次音频源（链接救不回来，与旧行为一致）
+      _urlsFetchedAt = DateTime.now();
+      return;
+    }
+    // 快照：换链接期间用户可能增删队列，回调不应看到被改动的列表
+    final mids = List<String>.of(_mids);
+    final gen = _queueGeneration;
     _restoring = true;
     _lastRefreshAuthExpired = false;
     _notify();
     try {
-      final result = await refresher(_mids);
-      if (result == null) return;
-      _lastRefreshAuthExpired = result.authExpired;
+      final result = await refresher(mids);
+      // 等接口期间队列已被替换/增删：结果属于旧队列，整体丢弃
+      if (result == null || gen != _queueGeneration) return;
       var changed = 0;
+      var refreshed = 0;
       for (var i = 0; i < _queue.length && i < result.urls.length; i++) {
         final u = result.urls[i];
-        if (u != null && u.isNotEmpty && u != _queue[i]) {
+        if (u == null || u.isEmpty) continue;
+        refreshed++;
+        if (u != _queue[i]) {
           _queue[i] = u;
           changed++;
         }
       }
-      // 即使链接未变（缓存命中）也记为刚确认过，避免每次操作都重取
-      _urlsFetchedAt = DateTime.now();
+      // 兜底：只要换到了链接就说明登录态有效，单曲失败不算过期
+      _lastRefreshAuthExpired = result.authExpired && refreshed == 0;
+      // 一首都没换到时（登录过期/网络失败）不记确认时间，下次播放再试
+      if (refreshed > 0) {
+        _urlsFetchedAt = DateTime.now();
+      }
       debugPrint(
         '[diag] queue urls refreshed total=${_queue.length} changed=$changed '
-        'authExpired=${result.authExpired}',
+        'refreshed=$refreshed authExpired=$_lastRefreshAuthExpired',
       );
       // 新链接落盘，下次恢复直接可用
       unawaited(_persistQueue());
@@ -319,6 +349,15 @@ class PlayerService {
       _restoring = false;
       _notify();
     }
+  }
+
+  /// 清除「上次换链接发现登录过期」标记。
+  /// UI 弹过一次重登提示后调用，避免用户在暂停/播放之间反复看到同一提示；
+  /// 下次换链接仍然失败会重新置位。
+  void acknowledgeAuthExpired() {
+    if (!_lastRefreshAuthExpired) return;
+    _lastRefreshAuthExpired = false;
+    _notify();
   }
 
   Future<void> toggle() async {
@@ -398,6 +437,7 @@ class PlayerService {
   /// 从队列移除第 [i] 首；移除的是当前播放歌曲时自动播下一首
   Future<void> removeFromQueue(int i) async {
     if (i < 0 || i >= _queue.length) return;
+    _queueGeneration++;
     final wasCurrent = i == _index;
     _queue.removeAt(i);
     if (_mids.length == _queue.length + 1) _mids.removeAt(i);
@@ -422,6 +462,7 @@ class PlayerService {
 
   /// 清空队列并停止播放
   Future<void> clear() async {
+    _queueGeneration++;
     _queue = [];
     _mids = [];
     _titles = [];
@@ -430,6 +471,7 @@ class PlayerService {
     _playlist = null;
     _restoredPending = false;
     _urlsFetchedAt = null;
+    _lastRefreshAuthExpired = false;
     _savedPosition = Duration.zero;
     await stop();
     unawaited(_persistQueue());
