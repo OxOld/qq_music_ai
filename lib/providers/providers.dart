@@ -75,6 +75,8 @@ class QQAuthNotifier extends StateNotifier<QQAuthState> {
   final QQAuthService _service;
   final QQMusicClient? _client;
   Timer? _refreshTimer;
+  Future<void>? _refreshInFlight;
+  DateTime _lastAutoRefresh = DateTime.fromMillisecondsSinceEpoch(0);
 
   Future<void> _load() async {
     state = await _service.load();
@@ -83,8 +85,16 @@ class QQAuthNotifier extends StateNotifier<QQAuthState> {
     unawaited(refresh());
   }
 
-  /// 静默续期登录态；成功则更新 state 并持久化
-  Future<void> refresh() async {
+  /// 静默续期登录态；成功则更新 state 并持久化。
+  /// 并发调用共享同一在途请求：避免重复请求，也避免两个响应乱序
+  /// 把较旧的 Cookie 覆盖回去。
+  Future<void> refresh() {
+    return _refreshInFlight ??= _doRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _doRefresh() async {
     final client = _client;
     if (client == null || !state.isLoggedIn) return;
     try {
@@ -102,11 +112,42 @@ class QQAuthNotifier extends StateNotifier<QQAuthState> {
     }
   }
 
+  /// 用（必要时自动续期的）登录态执行需要鉴权的操作。
+  ///
+  /// 写接口对登录态要求严格，key 滑动过期后删除/添加会直接失败
+  /// （表现为「音乐还能播，管理歌单却报错」）。这里先按当前登录态
+  /// 执行；遇到登录态类失败时静默续期一次，key 确有更新才重试
+  /// （避免对网络抖动导致的失败做重复写入）；续期不可用（微信登录 /
+  /// refresh_token 失效）则原样抛出，由调用方引导重新登录。
+  Future<T> runWithFreshAuth<T>(
+    Future<T> Function(QQAuthState auth) action,
+  ) async {
+    try {
+      return await action(state);
+    } on QQMusicAuthExpiredException {
+      final oldKey = state.musickey;
+      await refresh();
+      if (!state.isLoggedIn || state.musickey == oldKey) rethrow;
+      return await action(state);
+    }
+  }
+
+  /// 回到前台时补一次续期（进程被系统冻结时 12h 定时器不会走）。
+  /// 30 分钟内不重复请求，频繁前后台切换也不轰炸。
+  void refreshOnResume() {
+    if (!state.isLoggedIn) return;
+    final now = DateTime.now();
+    if (now.difference(_lastAutoRefresh) < const Duration(minutes: 30)) return;
+    _lastAutoRefresh = now;
+    unawaited(refresh());
+  }
+
   /// 每 12 小时续期一次（musickey 有效期约 3 天，取一半周期足够安全）
   void _scheduleRefresh() {
     _refreshTimer?.cancel();
     if (!state.isLoggedIn) return;
     _refreshTimer = Timer.periodic(const Duration(hours: 12), (_) {
+      _lastAutoRefresh = DateTime.now();
       unawaited(refresh());
     });
   }

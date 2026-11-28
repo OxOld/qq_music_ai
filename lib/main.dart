@@ -1,9 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'pages/root_page.dart';
 import 'providers/providers.dart';
+import 'services/background_keepalive.dart';
 import 'services/player_service.dart';
 import 'services/qq_music_client.dart';
 import 'theme/app_theme.dart';
@@ -25,6 +30,11 @@ Future<void> main() async {
     androidNotificationIcon: 'drawable/ic_notification',
     notificationColor: AppColors.brand,
   );
+  // 系统级后台保活（Android）：App 进程被杀后由系统每 12h 续期登录态，
+  // 实现「不开 App 也一劳永逸」；注册失败不影响启动
+  if (!kIsWeb && Platform.isAndroid) {
+    unawaited(registerKeepAliveTask());
+  }
   // 恢复队列播放前批量换新链接：持久化的 vkey 链接数小时即失效，
   // 旧链接直接播会失败（表现为「迷你条点播放没反应」）。
   // 3 路并行预取，client 侧 60 分钟缓存让近期播过的秒回。
@@ -73,10 +83,12 @@ class QqMusicAiApp extends StatefulWidget {
   State<QqMusicAiApp> createState() => _QqMusicAiAppState();
 }
 
-class _QqMusicAiAppState extends State<QqMusicAiApp> {
+class _QqMusicAiAppState extends State<QqMusicAiApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 主题色切换：重建整棵树（页面状态保留）
     AppColors.themeVersion.addListener(_onThemeChanged);
   }
@@ -87,8 +99,17 @@ class _QqMusicAiAppState extends State<QqMusicAiApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     AppColors.themeVersion.removeListener(_onThemeChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 回前台补一次登录态续期（进程被冻结期间 12h 定时器不会走）
+    if (state == AppLifecycleState.resumed) {
+      _container.read(qqAuthProvider.notifier).refreshOnResume();
+    }
   }
 
   @override

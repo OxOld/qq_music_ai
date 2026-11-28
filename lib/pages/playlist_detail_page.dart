@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/relogin_dialog.dart';
 import '../widgets/song_manage_sheet.dart';
 import 'login_page.dart';
 
@@ -214,7 +215,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     }
   }
 
-  /// 移除单首歌（自建歌单）：确认后调用 DelSonglist 并刷新列表
+  /// 移除单首歌（自建歌单）：确认后调用 DelSonglist，成功后做局部刷新
   Future<void> _removeSong(QQSong song) async {
     final confirmed = await showAppConfirmDialog(
       context,
@@ -226,14 +227,25 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     );
     if (!confirmed || !mounted) return;
     try {
-      await ref.read(qqMusicClientProvider).removeSongsFromPlaylist(
-        ref.read(qqAuthProvider),
-        widget.playlist.dirId,
-        [song],
-      );
+      await ref.read(qqAuthProvider.notifier).runWithFreshAuth((auth) async {
+        return ref.read(qqMusicClientProvider).removeSongsFromPlaylist(
+          auth,
+          widget.playlist.dirId,
+          [song],
+        );
+      });
       if (!mounted) return;
+      // 局部刷新：服务端已删成功，本地直接移除这一首即可。
+      // 不做整页重载，避免列表重建后滚动位置丢失（删中间的歌还要重新往下翻）
+      setState(() {
+        _songs = _songs
+            ?.where((s) => !(s.songId == song.songId && s.mid == song.mid))
+            .toList();
+      });
       AppToast.show(context, '已移除「${song.name}」', success: true);
-      _load();
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      await showReloginDialog(context);
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '移除失败：$e', error: true);

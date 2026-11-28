@@ -372,6 +372,17 @@ class QQMusicClient {
         .toList();
   }
 
+  /// musicu 登录态类失败码：key 过期 / 被顶号 / 未登录。
+  ///
+  /// 写接口（建歌单/加歌/删歌）对登录态要求严格，key 滑动过期后即返回
+  /// 1000/1001；而读取与取播放链接对旧 key 宽容（免费歌照样能播），
+  /// 故表现为「音乐还能放，删除却报 code=1001」。归一成
+  /// [QQMusicAuthExpiredException] 交给上层做「静默续期 + 重试」自愈。
+  static bool _isAuthCode(Object? code) {
+    final n = code is num ? code.toInt() : int.tryParse('$code');
+    return n == 1000 || n == 1001 || n == 301;
+  }
+
   // ---------- 写接口（需登录态） ----------
 
   /// 创建歌单，返回内部 dirId（加歌用）。
@@ -411,6 +422,9 @@ class QQMusicClient {
     final data = jsonDecode(body);
     final req = data['req_1'];
     if (req is! Map || req['code'] != 0) {
+      if (_isAuthCode(req?['code'])) {
+        throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+      }
       throw QQMusicException('创建歌单失败 code=${req?['code']}');
     }
     final d = req['data'];
@@ -469,6 +483,9 @@ class QQMusicClient {
       final data = jsonDecode(body);
       final req = data['req_1'];
       if (req is! Map || req['code'] != 0) {
+        if (_isAuthCode(req?['code'])) {
+          throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+        }
         throw QQMusicException('添加歌曲失败 code=${req?['code']}');
       }
       final retCode = req['data']?['retCode'];
@@ -521,6 +538,9 @@ class QQMusicClient {
       final data = jsonDecode(body);
       final req = data['req_1'];
       if (req is! Map || req['code'] != 0) {
+        if (_isAuthCode(req?['code'])) {
+          throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+        }
         throw QQMusicException('移除歌曲失败 code=${req?['code']}');
       }
       final retCode = req['data']?['retCode'];
@@ -557,6 +577,9 @@ class QQMusicClient {
     final data = jsonDecode(body);
     final req = data['req_1'];
     if (req is! Map || req['code'] != 0) {
+      if (_isAuthCode(req?['code'])) {
+        throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
+      }
       throw QQMusicException('删除歌单失败 code=${req?['code']}');
     }
     if (req['data']?['retCode'] != 0) {
@@ -697,10 +720,10 @@ class QQMusicClient {
     }
     final data = jsonDecode(_decode(resp.bodyBytes));
     final req1 = data['req_1'];
-    // 登录态失效：服务端不会返回 401，而是 code != 0（如 1000）
+    // 登录态失效：服务端不会返回 401，而是 code != 0（如 1000/1001）
     if (req1 is Map && req1['code'] != 0) {
       final code = req1['code'];
-      if (code == 1000 || code == 301) {
+      if (_isAuthCode(code)) {
         await clearUrlCache();
         throw const QQMusicAuthExpiredException('登录已失效，请重新登录');
       }

@@ -8,6 +8,7 @@ import '../services/match_service.dart';
 import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
 import 'app_toast.dart';
+import 'relogin_dialog.dart';
 
 /// AI 补充歌单弹层：先出建议列表（纯 AI 推荐，勾选筛选），
 /// 满意后「匹配并添加」（逐首匹配曲库，命中的自动加入歌单）；不满意可「换一批」。
@@ -163,6 +164,16 @@ class _SongManageSheetState extends ConsumerState<_SongManageSheet> {
       );
       widget.onChanged();
       if (mounted) Navigator.of(context).pop();
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      setState(() {
+        _matching = false;
+        _matchProgress = null;
+      });
+      await showReloginDialog(
+        context,
+        message: '添加歌曲需要有效的登录态，自动续期未能恢复。\n重新扫码登录后即可继续。',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {

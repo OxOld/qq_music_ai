@@ -12,6 +12,7 @@ import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/relogin_dialog.dart';
 import 'login_page.dart';
 import 'settings_page.dart';
 
@@ -174,10 +175,18 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     try {
       final client = ref.read(qqMusicClientProvider);
-      final created = await client.createPlaylist(auth, playlist.title);
-      await client.addSongsToPlaylist(auth, created.dirId, songs);
+      await ref.read(qqAuthProvider.notifier).runWithFreshAuth((auth) async {
+        final created = await client.createPlaylist(auth, playlist.title);
+        await client.addSongsToPlaylist(auth, created.dirId, songs);
+      });
       if (!mounted) return;
       AppToast.show(context, '歌单「${playlist.title}」已创建', success: true);
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      await showReloginDialog(
+        context,
+        message: '创建歌单需要有效的登录态，自动续期未能恢复。\n重新扫码登录后即可继续。',
+      );
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '创建失败：$e', error: true);
@@ -212,17 +221,24 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _addToPlaylist(MyPlaylist target) async {
-    final auth = ref.read(qqAuthProvider);
     final songs = _matchedSongs;
     if (songs.isEmpty) return;
 
     setState(() => _creating = true);
     try {
-      await ref
-          .read(qqMusicClientProvider)
-          .addSongsToPlaylist(auth, target.dirId, songs);
+      await ref.read(qqAuthProvider.notifier).runWithFreshAuth((auth) async {
+        return ref
+            .read(qqMusicClientProvider)
+            .addSongsToPlaylist(auth, target.dirId, songs);
+      });
       if (!mounted) return;
       AppToast.show(context, '已加入歌单「${target.name}」', success: true);
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      await showReloginDialog(
+        context,
+        message: '加入歌单需要有效的登录态，自动续期未能恢复。\n重新扫码登录后即可继续。',
+      );
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '加入失败：$e', error: true);

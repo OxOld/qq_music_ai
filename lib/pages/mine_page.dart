@@ -7,6 +7,7 @@ import '../services/qq_music_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/relogin_dialog.dart';
 import 'login_page.dart';
 import 'playlist_detail_page.dart';
 import 'settings_page.dart';
@@ -226,17 +227,26 @@ class MinePageState extends ConsumerState<MinePage> {
     showAppProgressDialog(context, '正在迁移歌曲…');
 
     try {
-      await ref
-          .read(qqMusicClientProvider)
-          .renamePlaylist(
-            ref.read(qqAuthProvider),
-            playlist: playlist,
-            newName: newName,
-          );
+      await ref.read(qqAuthProvider.notifier).runWithFreshAuth((auth) {
+        return ref
+            .read(qqMusicClientProvider)
+            .renamePlaylist(
+              auth,
+              playlist: playlist,
+              newName: newName,
+            );
+      });
       if (!mounted) return;
       Navigator.of(context).pop(); // 关闭进度框
       AppToast.show(context, '已重命名为「$newName」', success: true);
       _load();
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await showReloginDialog(
+        context,
+        message: '重命名歌单需要有效的登录态，自动续期未能恢复。\n重新扫码登录后即可继续。',
+      );
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -256,12 +266,20 @@ class MinePageState extends ConsumerState<MinePage> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await ref
-          .read(qqMusicClientProvider)
-          .deletePlaylist(ref.read(qqAuthProvider), dirId: playlist.dirId);
+      await ref.read(qqAuthProvider.notifier).runWithFreshAuth((auth) {
+        return ref
+            .read(qqMusicClientProvider)
+            .deletePlaylist(auth, dirId: playlist.dirId);
+      });
       if (!mounted) return;
       AppToast.show(context, '歌单「${playlist.name}」已删除', success: true);
       _load();
+    } on QQMusicAuthExpiredException {
+      if (!mounted) return;
+      await showReloginDialog(
+        context,
+        message: '删除歌单需要有效的登录态，自动续期未能恢复。\n重新扫码登录后即可继续。',
+      );
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, '删除失败：$e', error: true);
