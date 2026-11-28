@@ -10,10 +10,17 @@ pluginManagement {
 
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
+    // CI（GitHub 海外 runner）直连官方源；本地开发走国内镜像加速。
+    // 镜像对海外不稳定：大文件（x86_64 引擎约 39MB）反复超时/断流，
+    // CI 曾因此连续构建失败（Read timed out / 响应被截断）。
+    val isCi = System.getenv("CI") == "true"
+
     repositories {
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        if (!isCi) {
+            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/central") }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -30,10 +37,15 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(org.gradle.api.initialization.resolve.RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        if (System.getenv("CI") == "true") {
+            // io.flutter 引擎构件只在 download.flutter.io 一处可下
+            maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        } else {
+            maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/public") }
+            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        }
         google()
         mavenCentral()
     }
